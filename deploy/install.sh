@@ -6,6 +6,7 @@ RELEASE="$1"
 [[ "$RELEASE" == /opt/eventplay/releases/* && -f "$RELEASE/apps/api/main.py" ]] || exit 1
 id eventplay >/dev/null 2>&1 || useradd --system --home-dir "$BASE" --shell /sbin/nologin eventplay
 install -d -o eventplay -g eventplay /var/lib/eventplay
+install -d -o eventplay -g eventplay "$BASE/.npm"
 chown -R eventplay:eventplay "$RELEASE"
 cd "$RELEASE/apps/admin"
 runuser -u eventplay -- npm ci --ignore-scripts --no-audit --no-fund
