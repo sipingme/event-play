@@ -46,6 +46,7 @@ const api='http://127.0.0.1:8012';
       await player.getByRole('button',{name:'点击备用加速'}).click();
       await expect.poll(async()=> (await state()).scores[0]).toBe(before+1);
     } else if(id==='swipe-money') {
+      await expect(player.getByRole('button',{name:'无障碍操作：数一张',exact:true})).toBeEnabled();
       const card=player.getByText('EVENTPLAY · 财富积分卡',{exact:true}).locator('..');
       await card.scrollIntoViewIfNeeded(); const box=await card.boundingBox();
       await page.mouse.move(box.x+box.width/2,box.y+box.height-25);await page.mouse.down();

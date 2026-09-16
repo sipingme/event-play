@@ -40,3 +40,15 @@ Back up SQLite using its backup API and preserve credentials/config before updat
 - Server checks: Linux production build, 25 backend tests, HTTPS dashboard and five race assets, anonymous access rejection, join/start/tap/WSS/finish. Nginx and password-file checksums unchanged.
 - Completed diagnostic room: `pALPAc6ov-3XrbLV`. No active race was present at deployment. Existing database and preview credentials were preserved.
 - Rollback if needed: repoint `/opt/eventplay/current` to the previous release and restart `eventplay-web` and `eventplay-api`. Do not automatically restore the database backup: doing so would discard activity created after deployment.
+
+## Five-category examples release — 2026-09-16 (current)
+
+- Deployed application source: Git commit `8bf7320`, release `/opt/eventplay/releases/20260916-8bf7320`.
+- Entry: `https://event.siping.me/dashboard/templates`.
+- Five featured examples: shake race, swipe money, alternating clicks, reaction mole, controlled coin catching. Each supports preview, independent trial, and template-to-draft creation.
+- Previous release retained: `/opt/eventplay/releases/20260916-cartoon-race`.
+- Backup: `/var/lib/eventplay/backup-before-examples-20260916.sqlite3`.
+- Local checks: 6 frontend tests, 28 backend tests, five-category browser flow, existing race/quiz/draw visuals, cloud activity workflow, and fixed-entry agenda transitions/offline recovery. Final build passed. Browser tests wait for client-side start synchronization before gesture injection.
+- Server checks: Linux build and 28 backend tests; authenticated HTTPS template pages, all five trial input types and WSS scores; diagnostic trials ended. Unauthorized pages remain 401 and realtime endpoints 403; Nginx and preview-password files unchanged.
+- DeviceMotion testing uses synthetic browser sensor events, not physical iOS/Android/WeChat devices. Real-device acceptance remains necessary; click fallback is available.
+- Test/docs-only follow-up commits do not change the deployed application bundle. See `GAME_EXAMPLES.md` for behavior and limitations.
