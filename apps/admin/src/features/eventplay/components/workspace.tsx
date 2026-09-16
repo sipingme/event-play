@@ -15,16 +15,17 @@ import { activitiesQuery, eventKeys } from '../api/queries';
 import { archiveActivity, configOf, createActivity, templates } from '../api/service';
 import type { Activity, Template } from '../api/types';
 import { Stage } from './stage';
+import { StarterGames, TemplatePoster, gameCategories } from './template-experience';
 
 export function TemplateCard({ template }: { template: Template }) {
   return (
     <Card className='overflow-hidden py-0 shadow-none'>
       <Link
-        href={`/dashboard/activities/new?template=${template.id}`}
+        href={`/dashboard/templates/${template.id}`}
         className='block p-2'
         aria-label={`使用${template.name}模板`}
       >
-        <Stage compact config={{ ...template, participants: 200, brand: 'EventPlay', logo: '' }} />
+        {template.featured ? <TemplatePoster template={template}/> : <Stage compact config={{ ...template, participants: 200, brand: 'EventPlay', logo: '' }} />}
       </Link>
       <CardContent className='pb-5'>
         <div className='mb-2 flex items-center justify-between'>
@@ -33,7 +34,7 @@ export function TemplateCard({ template }: { template: Template }) {
         </div>
         <p className='text-xs leading-5 text-muted-foreground'>{template.description}</p>
         <div className='mt-4 flex items-center justify-between text-xs text-muted-foreground'>
-          <span>{template.duration / 60} 分钟 · 点击互动</span>
+          <Link href={`/dashboard/templates/${template.id}`} className='underline'>看效果 / 试玩</Link>
           <Link
             className='flex items-center gap-1 text-foreground hover:underline'
             href={`/dashboard/activities/new?template=${template.id}`}
@@ -104,7 +105,7 @@ function ActivityRows({ items }: { items: Activity[] }) {
                 </p>
               </td>
               <td>
-                {a.mechanic === 'race' ? '团队竞速' : '团队拔河'}
+                {{ money: '数钱挑战', race: '团队竞速', tug: '团队拔河', alternating: '左右冲刺', light: '共同点亮', quiz: '答题闯关', draw: '基础抽奖', catch: '接金币', reaction: '萌鼠出没' }[a.mechanic]}
                 <p className='mt-1 text-xs text-muted-foreground'>预计 {a.participants} 人</p>
               </td>
               <td>
@@ -149,6 +150,7 @@ export function Workspace() {
       pageTitle='把下一场活动，变成全场的主场。'
       pageDescription='从一个想法开始，创造大家都想参与的现场。'
     >
+      <StarterGames />
       <section className='ep-preview-hero my-3 grid gap-8 rounded-2xl border p-6 md:grid-cols-[1.3fr_1fr] md:p-8'>
         <div className='flex flex-col justify-center'>
           <Badge variant='outline' className='mb-5'>
@@ -219,7 +221,7 @@ export function Workspace() {
           </Link>
         </div>
         <div className='grid gap-4 md:grid-cols-3'>
-          {templates.slice(0, 3).map((t) => (
+          {templates.filter(t=>!t.featured).slice(0, 3).map((t) => (
             <TemplateCard key={t.id} template={t} />
           ))}
         </div>
@@ -281,11 +283,11 @@ export function Templates() {
   const [filter, setFilter] = useState('全部');
   return (
     <PageContainer
-      pageTitle='玩法模板'
-      pageDescription='熟悉的玩法，属于你的表达。选择模板后可以自由调整主题与队伍。'
+      pageTitle='游戏体验库'
+      pageDescription='先看效果、扫码体验，再一键创建属于你的品牌活动。'
     >
-      <div className='my-4 flex gap-2'>
-        {['全部', '竞速', '对抗'].map((s) => (
+      <div className='my-4 flex flex-wrap gap-2'>
+        {['全部', ...gameCategories, '更多玩法'].map((s) => (
           <Button
             key={s}
             variant={filter === s ? 'default' : 'outline'}
@@ -297,13 +299,13 @@ export function Templates() {
       </div>
       <div className='grid gap-5 md:grid-cols-2 xl:grid-cols-3'>
         {templates
-          .filter((t) => filter === '全部' || t.mechanic === (filter === '竞速' ? 'race' : 'tug'))
+          .filter((t) => filter === '全部' || (filter === '更多玩法' ? !t.featured : t.featured && t.category === filter))
           .map((t) => (
             <TemplateCard key={t.id} template={t} />
           ))}
       </div>
       <p className='mt-6 text-xs text-muted-foreground'>
-        以上是可配置的前端预览模板；真实多人游戏引擎将在后续阶段接入。
+        保存并发布活动后，在联机主持端邀请 H5 玩家参与。当前为预览版，不涉及真实奖品。
       </p>
     </PageContainer>
   );

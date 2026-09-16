@@ -2,24 +2,40 @@
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import type { GameConfig } from '../api/types';
+import type { LiveRoom } from '../api/realtime';
+import { RaceArena } from './race-scene';
 export function Stage({
   config,
   scores = [78, 65, 52],
   remaining,
   compact = false,
-  live = false
+  live = false,
+  phase = 'running',
+  countdown,
+  playerCount,
+  playerUrl,
+  connected
 }: {
   config: GameConfig;
   scores?: number[];
   remaining?: number;
   compact?: boolean;
   live?: boolean;
+  phase?: LiveRoom['state'];
+  countdown?: number;
+  playerCount?: number;
+  playerUrl?: string;
+  connected?: boolean;
 }) {
+  if (config.mechanic === 'race') return <RaceArena config={config} scores={scores} remaining={remaining} compact={compact} live={live} phase={phase} countdown={countdown} playerCount={playerCount} playerUrl={playerUrl} connected={connected} />;
   const teams = config.teams
     .split(/[,，]/)
     .map((s) => s.trim())
     .filter(Boolean);
   const max = Math.max(100, ...scores) * 1.15;
+  const total = scores.reduce((sum, score) => sum + score, 0);
+  const goal = config.goal ?? 1000;
+  const progress = Math.min(100, total / goal * 100);
   return (
     <div className={cn('ep-stage', `ep-stage-${config.theme}`, compact && 'ep-stage-compact')}>
       <div className='ep-stage-stars' aria-hidden='true' />
@@ -60,10 +76,36 @@ export function Stage({
         <p className='mt-2 text-xs opacity-70'>
           {config.mechanic === 'tug'
             ? '凝聚每一份力量，一起推动胜利'
+            : config.mechanic === 'light' ? '每个人的贡献，汇聚成同一束光'
+            : config.mechanic === 'alternating' ? '左一下，右一下，齐心加速'
+            : config.mechanic === 'money' ? '向上划动品牌卡片，积累团队财富积分'
             : '每一次点击，都让我们更进一步'}
         </p>
       </div>
-      {config.mechanic === 'race' ? (
+      {['quiz', 'draw', 'catch', 'reaction'].includes(config.mechanic) ? (
+        <div className='relative rounded-xl border border-white/25 bg-white/10 p-8 text-center'>
+          <p className='text-3xl font-semibold'>{config.mechanic === 'reaction' ? '萌鼠出没 · 看准再出手' : config.mechanic === 'quiz' ? 'A · B · C · D' : config.mechanic === 'draw' ? '幸运时刻' : '←  接金币  →'}</p>
+          <p className='mt-4 text-sm'>{config.mechanic === 'reaction' ? '九宫格 · 每轮一次机会 · 命中 +1 分' : config.mechanic === 'quiz' ? '限时单选题 · 答对 +10 分' : config.mechanic === 'draw' ? `从入场名单抽取 ${config.winnerCount ?? 1} 人` : '三条轨道 · 左右移动 · 接到 +1 分'}</p>
+          <p className='mt-3 text-xs opacity-70'>发布后进入联机主持端开始</p>
+        </div>
+      ) : config.mechanic === 'light' ? (
+        <div className='relative flex flex-col items-center gap-5 py-4'>
+          <div className='flex size-40 items-center justify-center rounded-full border-4 border-amber-200 bg-amber-100/10 p-5 transition-all duration-500' style={{ opacity: 0.25 + progress / 100 * 0.75, boxShadow: `0 0 ${progress}px #fcd34d88` }}>
+            {config.logo ? <Image unoptimized src={config.logo} width={100} height={100} alt='共同点亮的品牌 Logo' className='max-h-28 object-contain' /> : <strong className='text-center text-xl'>{config.brand || 'EventPlay'}</strong>}
+          </div>
+          <strong className='text-3xl'>{progress >= 100 ? '全场点亮成功！' : `${Math.floor(progress)}%`}</strong>
+          <div role='progressbar' aria-label='共同点亮进度' aria-valuenow={Math.floor(progress)} aria-valuemin={0} aria-valuemax={100} className='h-3 w-3/4 overflow-hidden rounded-full bg-white/15'><div className='h-full bg-amber-200 transition-all' style={{ width: `${progress}%` }} /></div>
+          <span className='text-sm'>{total} / {goal} 份能量 · 全场合作，不评队伍输赢</span>
+        </div>
+      ) : config.mechanic === 'money' ? (
+        <div className='relative grid grid-cols-2 gap-4'>
+          {teams.map((team, i) => <div key={team} className='rounded-xl border border-amber-200/40 bg-amber-100/10 p-5 text-center'>
+            <p className='text-sm'>{team}</p><p className='my-4 font-mono text-4xl font-bold text-amber-200'>{scores[i] ?? 0}</p>
+            <div className='h-2 overflow-hidden rounded bg-white/15'><div className='h-full bg-amber-200 transition-all' style={{ width: `${Math.min(100, ((scores[i] ?? 0) / max) * 100)}%` }} /></div>
+            <p className='mt-3 text-xs opacity-70'>财富积分 · 非现金</p>
+          </div>)}
+        </div>
+      ) : config.mechanic === 'alternating' ? (
         <div className='relative space-y-3'>
           {teams.map((team, i) => (
             <div key={team + i} className='ep-lane'>
@@ -75,11 +117,8 @@ export function Stage({
               >
                 <span className='ep-runner-glow' />
                 <svg viewBox='0 0 64 38' className='relative h-9 w-14' aria-hidden='true'>
-                  <path
-                    fill='currentColor'
-                    d='m9 13 11-4 16 2 8-8 10 2 5 9-7 3-4-3-8 12-7 1-3 9h-6l2-12-10-2-7 14H4l6-17-6-3z'
-                  />
-                  <path fill='currentColor' d='m12 12-9-2-3 8 5-2 6 3z' />
+                  <circle cx='36' cy='7' r='6' fill='currentColor'/>
+                  <path d='m30 16-10 8m10-8 10 8 10-4m-20-4-5 12-13 5m13-5 13 6 9-2' fill='none' stroke='currentColor' strokeWidth='5' strokeLinecap='round'/>
                 </svg>
               </span>
               <span className='ep-finish' />
@@ -101,7 +140,7 @@ export function Stage({
         </div>
       )}
       <div className='relative mt-6 flex items-center justify-between border-t border-white/15 pt-3 text-xs opacity-70'>
-        <span>点击手机，为你的战队加速</span>
+        <span>{config.mechanic === 'light' ? '全场共同贡献，点亮属于我们的品牌' : config.mechanic === 'alternating' ? '左右交替，齐心冲刺' : config.mechanic === 'money' ? '向上滑动，一划一分' : '点击手机，为你的战队加速'}</span>
         <span>{live ? '联机测试 · 玩家实时贡献' : '演示画面 · 非真实比赛'}</span>
       </div>
     </div>

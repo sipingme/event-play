@@ -29,3 +29,14 @@ nginx -t
 Back up SQLite using its backup API and preserve credentials/config before updates. A backend restart pauses active rounds. Organizer demo activities remain in each browser's localStorage; local development activities are not automatically migrated. Create and publish an activity on the deployed origin, then create a real-time room from the host page.
 
 2026-09-16 verification: HTTPS dashboard 200 with credentials, unauthorized page 401 without cookie issuance, unauthorized API 403, room create/join/start/tap/finish and WSS score delivery passed. A completed `Deployment smoke test` room is retained for deployment diagnostics.
+
+## Cartoon race release — 2026-09-16
+
+- Active release: `/opt/eventplay/releases/20260916-cartoon-race` (tested working-tree source, not a new Git commit).
+- Previous release retained: `/opt/eventplay/releases/20260916-616bb74`.
+- SQLite backup: `/var/lib/eventplay/backup-before-race-20260916.sqlite3`.
+- Adds bright cartoon stadium, four team-colored horse animation strips, sprint notice, final standings including ties, and responsive/fullscreen presentation.
+- Local checks: production build, 5 frontend tests, 25 backend tests, browser regression for race/quiz/draw including fullscreen and mobile layout.
+- Server checks: Linux production build, 25 backend tests, HTTPS dashboard and five race assets, anonymous access rejection, join/start/tap/WSS/finish. Nginx and password-file checksums unchanged.
+- Completed diagnostic room: `pALPAc6ov-3XrbLV`. No active race was present at deployment. Existing database and preview credentials were preserved.
+- Rollback if needed: repoint `/opt/eventplay/current` to the previous release and restart `eventplay-web` and `eventplay-api`. Do not automatically restore the database backup: doing so would discard activity created after deployment.

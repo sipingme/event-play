@@ -1,5 +1,12 @@
 import { queryOptions } from '@tanstack/react-query';
-import { getActivity, getBrand, getRoom, listActivities, listRooms } from './service';
+import { getActivity, getBrand, getRoom, listActivities, listRooms, getPublicEvent } from './service';
+export const publicEventQuery = (id: string) => queryOptions({
+  queryKey: ['eventplay-public-event', id],
+  queryFn: () => getPublicEvent(id),
+  refetchInterval: 2000,
+  refetchIntervalInBackground: true,
+  retry: 1
+});
 export const eventKeys = { all: ['eventplay'] as const };
 export const activitiesQuery = () =>
   queryOptions({ queryKey: [...eventKeys.all, 'activities'], queryFn: listActivities });

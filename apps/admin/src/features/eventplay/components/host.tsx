@@ -100,6 +100,7 @@ export function HostLobby() {
       pageTitle='准备好，让全场一起开玩。'
       pageDescription='选择已保存演示版本的活动，进入专注现场操作的主持人工作台。'
     >
+      <p className='mb-5 text-sm'><Link href='/dashboard/cloud' className='underline'>云工作区与房间历史 →</Link> · 云模式重新进入房间会接管主持权限，旧主持凭证将失效。</p>
       {error && (
         <p role='alert' className='mb-4 text-destructive'>
           {error}
@@ -134,7 +135,7 @@ export function HostLobby() {
                   <Badge variant='secondary'>v{item.release!.version}</Badge>
                 </div>
                 <p className='text-sm text-muted-foreground'>
-                  {item.release!.config.mechanic === 'race' ? '团队竞速' : '团队拔河'} ·{' '}
+                  {{ money: '数钱挑战', race: '团队竞速', tug: '团队拔河', alternating: '左右冲刺', light: '共同点亮', quiz: '答题闯关', draw: '基础抽奖', catch: '接金币', reaction: '萌鼠出没' }[item.release!.config.mechanic]} ·{' '}
                   {item.release!.config.duration} 秒 · 预计 {item.release!.config.participants} 人
                 </p>
                 <Button className='h-12 w-full' disabled={!!busy} onClick={() => enterLive(item.id, item.release!.config)}>

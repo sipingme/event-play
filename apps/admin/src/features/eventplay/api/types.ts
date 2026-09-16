@@ -1,6 +1,22 @@
-export type Mechanic = 'race' | 'tug';
+export type Mechanic = 'race' | 'tug' | 'money' | 'alternating' | 'light' | 'quiz' | 'draw' | 'catch' | 'reaction';
 export type ThemeId = 'gold' | 'space' | 'garden';
+export interface PublicEvent {
+  id: string;
+  name: string;
+  index: number;
+  total: number;
+  roomId: string | null;
+  stepName: string | null;
+  state: DemoRoom['state'];
+  finished: boolean;
+}
 export interface GameConfig {
+  inputMode?: 'tap' | 'shake';
+  quizText?: string;
+  winnerCount?: number;
+  prizeName?: string;
+  catchDifficulty?: 'easy' | 'normal' | 'hard';
+  goal?: number;
   name: string;
   description: string;
   mechanic: Mechanic;
@@ -19,6 +35,8 @@ export interface Activity extends GameConfig {
   release?: { version: number; config: GameConfig; createdAt: string };
 }
 export interface Template {
+  inputMode?: 'tap' | 'shake';
+  featured?: boolean;
   id: string;
   name: string;
   category: string;

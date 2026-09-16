@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { activityQuery, eventKeys, roomQuery, roomsQuery } from '../api/queries';
-import { commandRoom, publishDemo, validateConfig } from '../api/service';
+import { cloudToken, commandRoom, publishDemo, validateConfig } from '../api/service';
 import { enterActivityRoom } from '../api/realtime';
 import type { DemoRoom } from '../api/types';
 import { Stage } from './stage';
@@ -37,7 +37,7 @@ export function Publish({ id }: { id: string }) {
       if (action === 'publish') {
         await publishDemo(id);
         await client.invalidateQueries({ queryKey: eventKeys.all });
-        toast.success('已保存本地演示版本');
+        toast.success(cloudToken() ? '云端活动版本已发布' : '已保存本地活动版本');
       } else {
         if (!data.release) throw new Error('请先保存活动版本');
         const room = await enterActivityRoom(id, data.release.config);
@@ -99,7 +99,7 @@ export function Publish({ id }: { id: string }) {
               disabled={busy || errors.length > 0}
               onClick={() => run('publish')}
             >
-              保存演示版本
+              保存并发布活动版本
             </Button>
             <Button
               className='w-full'
@@ -117,7 +117,7 @@ export function Publish({ id }: { id: string }) {
           <Icons.lock className='size-4' /> 正式发布尚未启用
         </h3>
         <p className='mt-2 text-sm leading-6 text-muted-foreground'>
-          活动配置保存在当前浏览器。联机主持端连接实时后端，支持 H5 玩家扫码加入；正式账号、微信身份及奖品服务尚未接入。旧模拟彩排请从主持端首页的次要入口进入。
+          {cloudToken() ? '当前活动保存到云工作区，可跨浏览器恢复。' : '当前活动配置保存在本机，可从云工作区页面主动导入。'}联机主持端支持 H5 玩家扫码加入；正式账号、微信身份及奖品服务尚未接入。
         </p>
       </div>
     </PageContainer>

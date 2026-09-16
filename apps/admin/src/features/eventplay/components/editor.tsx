@@ -14,6 +14,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { activityQuery, brandQuery, eventKeys } from '../api/queries';
 import {
   configOf,
+  DEFAULT_QUIZ,
+  cloudToken,
   createActivity,
   readLogo,
   saveActivity,
@@ -33,10 +35,12 @@ export function NewActivity() {
         name: template.name,
         description: search.get('prompt') ?? template.description,
         mechanic: template.mechanic,
+        inputMode: template.inputMode ?? 'tap',
         theme: template.theme,
         teams: template.teams,
         duration: template.duration,
         participants: 200,
+        goal: 1000,
         brand: brand.name,
         logo: brand.logo
       }}
@@ -56,7 +60,7 @@ function Editor({ initial, activity }: { initial: GameConfig; activity?: Activit
   const [previous, setPrevious] = useState<GameConfig | null>(null);
   const [savedAt, setSavedAt] = useState('');
   const form = useAppForm({
-    defaultValues: initial,
+    defaultValues: { ...initial, goal: initial.goal ?? 1000, quizText: initial.quizText ?? DEFAULT_QUIZ, winnerCount: initial.winnerCount ?? 1, prizeName: initial.prizeName ?? '幸运奖', catchDifficulty: initial.catchDifficulty ?? 'normal' } as GameConfig,
     onSubmit: async ({ value }) => {
       setNotice('');
       try {
@@ -69,7 +73,7 @@ function Editor({ initial, activity }: { initial: GameConfig; activity?: Activit
         form.reset(configOf(saved));
         setSavedAt(new Date().toLocaleTimeString('zh-CN'));
         await client.invalidateQueries({ queryKey: eventKeys.all });
-        toast.success('草稿已保存到当前浏览器');
+        toast.success(cloudToken() ? '草稿已保存到云工作区' : '草稿已保存到当前浏览器');
         if (!activity) router.replace(`/dashboard/activities/${saved.id}/edit`);
       } catch (e) {
         setNotice((e as Error).message);
@@ -181,11 +185,26 @@ function Editor({ initial, activity }: { initial: GameConfig; activity?: Activit
                     label='互动玩法'
                     options={[
                       { value: 'race', label: '团队竞速' },
-                      { value: 'tug', label: '团队拔河' }
+                      { value: 'tug', label: '团队拔河' },
+                      { value: 'money', label: '数钱挑战（向上滑动）' },
+                      { value: 'alternating', label: '左右交替冲刺' },
+                      { value: 'light', label: '共同点亮 Logo' },
+                      { value: 'quiz', label: '答题闯关' },
+                      { value: 'draw', label: '基础抽奖' },
+                      { value: 'catch', label: '接金币' }
+                      ,{ value: 'reaction', label: '萌鼠出没（手眼协调）' }
                     ]}
                   />
                 )}
               </form.AppField>
+              <form.AppField name='goal'>{(field) => <field.TextField label='共同点亮目标（仅点亮玩法生效）' type='number' min={10} max={100000} />}</form.AppField>
+              <form.Subscribe selector={(s) => s.values.mechanic}>{(mechanic) => <>
+                {mechanic === 'race' && <form.AppField name='inputMode'>{(field) => <field.SelectField label='赛马操作方式' options={[{label:'点击加速',value:'tap'},{label:'摇一摇（保留点击备用）',value:'shake'}]} />}</form.AppField>}
+                {mechanic === 'quiz' && <form.AppField name='quizText'>{(field) => <field.TextareaField label='单选题库' description='每行一题：题目|选项A|选项B|选项C|选项D|正确字母。支持1～20题，总时长均分，每题至少5秒。选项内不能使用竖线。' rows={6} />}</form.AppField>}
+                {mechanic === 'draw' && <form.AppField name='winnerCount'>{(field) => <field.TextField label='中奖名额' type='number' min={1} max={100} description='从开场时已入场的玩家中一次性抽取，不重复中奖；无奖品发放。' />}</form.AppField>}
+                {mechanic === 'draw' && <form.AppField name='prizeName'>{(field) => <field.TextField label='奖项名称' maxLength={60} required description='写入最终抽奖记录；系统不负责实际发奖。' />}</form.AppField>}
+                {mechanic === 'catch' && <form.AppField name='catchDifficulty'>{(field) => <field.SelectField label='接金币难度' options={[{label:'简单 · 每3秒一枚',value:'easy'},{label:'标准 · 每2秒一枚',value:'normal'},{label:'挑战 · 每1秒一枚',value:'hard'}]} />}</form.AppField>}
+              </>}</form.Subscribe>
               <div className='grid grid-cols-2 gap-3'>
                 <form.AppField name='duration'>
                   {(field) => (

@@ -1,6 +1,7 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -16,12 +17,22 @@ import {
   liveQuery,
   ownerToken,
   restoreOwner,
+  rematchLiveRoom,
   playerSession,
+  sendPresence,
+  playerProfile,
+  rememberPlayer,
   tapLiveRoom,
   type LiveRoom
 } from '../api/realtime';
 import { ClientReady, PageError } from './shell';
 import { Stage } from './stage';
+import { MoneyInput } from './money-input';
+import { ShakeInput } from './shake-input';
+import { GamePanel } from './game-panels';
+import { ScreenPresentation } from './screen-presentation';
+import { HostAgenda } from './host-agenda';
+import { cloudToken } from '../api/service';
 
 const labels = {
   waiting: '等待开场',
@@ -30,8 +41,8 @@ const labels = {
   completed: '本局已结算',
   aborted: '本局已中止'
 };
-function useLive(id: string) {
-  const { data } = useSuspenseQuery(liveQuery(id));
+function useLive(id: string, mode: 'host' | 'screen' | 'play', token?: string) {
+  const { data } = useSuspenseQuery(liveQuery(id, mode));
   const client = useQueryClient();
   const [connected, setConnected] = useState(false);
   useEffect(() => {
@@ -40,12 +51,14 @@ function useLive(id: string) {
     let timer: ReturnType<typeof setTimeout>;
     let watchdog: ReturnType<typeof setTimeout>;
     function connect() {
-      socket = new WebSocket(`${apiBase().replace(/^http/, 'ws')}/rooms/${id}/stream`);
+      const view = mode === 'host' ? 'full' : mode === 'play' && token ? 'player' : 'screen';
+      socket = new WebSocket(`${apiBase().replace(/^http/, 'ws')}/rooms/${id}/stream?view=${view}`);
+      socket.addEventListener('open', () => { if (view === 'player') socket.send(JSON.stringify({token})); });
       socket.addEventListener('message', (event) => {
         if (!active) return;
         try {
           const next: LiveRoom = JSON.parse(event.data);
-          client.setQueryData<LiveRoom>(liveKey(id), (old) =>
+          client.setQueryData<LiveRoom>(liveKey(id, mode), (old) =>
             !old || next.revision >= old.revision ? next : old
           );
           setConnected(true);
@@ -73,27 +86,47 @@ function useLive(id: string) {
       clearTimeout(watchdog);
       socket?.close();
     };
-  }, [id, client]);
+  }, [id, client, mode, token]);
   return { data, connected };
 }
 export function LivePage({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }) {
   return (
     <PageError>
       <ClientReady>
-        <LiveView id={id} mode={mode} />
+        <LiveView key={`${mode}:${id}`} id={id} mode={mode} />
       </ClientReady>
     </PageError>
   );
 }
 function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }) {
-  const { data, connected } = useLive(id);
+  const router = useRouter();
+  const inputPending = useRef(false);
+  const [nextSide, setNextSide] = useState<'left' | 'right'>('left');
   const [session, setSession] = useState(() => playerSession(id));
+  const { data, connected } = useLive(id, mode, session?.token);
+  useEffect(() => {
+    if (mode === 'host' || mode === 'play' && !session) return;
+    const clientId = Array.from(crypto.getRandomValues(new Uint32Array(4))).join('-');
+    let pending = false;
+    const pulse = async () => {
+      if (pending || document.visibilityState === 'hidden' || !navigator.onLine) return;
+      pending = true;
+      try { await sendPresence(id, mode === 'screen' ? 'screen' : 'player', clientId); } catch { /* Status expires on the server; the room socket handles reconnection. */ }
+      finally { pending = false; }
+    };
+    void pulse();
+    const timer = setInterval(pulse, 5000);
+    document.addEventListener('visibilitychange', pulse);
+    window.addEventListener('online', pulse);
+    return () => {clearInterval(timer);document.removeEventListener('visibilitychange',pulse);window.removeEventListener('online',pulse);};
+  }, [id, mode, session]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [confirm, setConfirm] = useState('');
   const [hasOwner, setHasOwner] = useState(() => !!ownerToken(id));
   const [notice, setNotice] = useState('');
-  const playerUrl = `${window.location.origin}/live/play/${id}`;
+  const [checks, setChecks] = useState<string[]>([]);
+  const playerUrl = `${window.location.origin}/live/${data.agendaId ? `event/${data.agendaId}` : `play/${id}`}`;
   const recoveryForm = useAppForm({
     defaultValues: { token: '' },
     onSubmit: async ({ value }) => {
@@ -119,12 +152,15 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
   const teams = data.config.teams.split(',');
   const player = data.players.find((p) => p.id === session?.playerId);
   const ended = data.state === 'completed' || data.state === 'aborted';
+  const special = ['quiz', 'draw', 'catch', 'reaction'].includes(data.config.mechanic);
+  const profile = playerProfile(data.agendaId);
   const form = useAppForm({
-    defaultValues: { name: '', team: '0' },
+    defaultValues: { name: profile.name, team: String(Math.max(0, teams.indexOf(profile.team))) },
     onSubmit: async ({ value }) => {
       setError('');
       try {
         setSession(await joinLiveRoom(id, value.name, Number(value.team)));
+        rememberPlayer(data.agendaId, value.name, teams[Number(value.team)]);
       } catch (e) {
         setError((e as Error).message);
       }
@@ -134,7 +170,7 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
     setBusy(true);
     setError('');
     try {
-      await liveCommand(id, action);
+      await liveCommand(id, action === 'start' ? 'countdown' : action);
       setConfirm('');
     } catch (e) {
       setError((e as Error).message);
@@ -142,16 +178,19 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
       setBusy(false);
     }
   }
-  async function tap() {
-    if (busy || !connected || data.state !== 'running') return;
+  async function tap(side?: 'left' | 'right' | 'tap' | 'shake') {
+    if (inputPending.current || busy || !connected || data.state !== 'running') return;
+    inputPending.current = true;
     setBusy(true);
     setError('');
     try {
-      const result = await tapLiveRoom(id);
+      const result = await tapLiveRoom(id, side ?? (data.config.mechanic === 'money' ? 'swipe' : 'tap'));
+      if (result.nextSide) setNextSide(result.nextSide);
       if (!result.accepted) setError(result.reason);
     } catch {
       setError('发送失败，本次不补发；请检查网络后再点击');
     } finally {
+      inputPending.current = false;
       setBusy(false);
     }
   }
@@ -162,17 +201,20 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
         {connected ? '实时连接' : '断线重连中 · 操作已禁用'}
       </Badge>
       <Badge variant='outline'>{labels[data.state]}</Badge>
-      <Badge variant='outline'>已入场 {data.players.length} 人（非在线人数）</Badge>
+      {data.trial && <Badge variant='secondary'>独立试玩 · 非正式活动</Badge>}
+      <Badge variant='outline'>已入场 {data.playerCount ?? data.players.length} 人</Badge>
+      {data.presence && <><Badge variant='outline'>近期在线 {data.presence.online} 人 · 未检测到心跳 {data.presence.offline} 人</Badge><Badge variant={data.presence.screens ? 'outline' : 'destructive'}>大屏页面 {data.presence.screens} 个</Badge></>}
+      {!!data.countdown && <div role='timer' className='w-full rounded-xl bg-amber-500/15 p-5 text-center text-4xl font-bold'>{connected ? `准备开场 · ${data.countdown}` : '正在重连，请等待开场状态同步'}</div>}
     </div>
   );
   const stage = (
-    <div className='relative overflow-hidden rounded-xl'>
-      <Stage config={data.config} scores={data.scores} remaining={data.remaining} live />
-      {(data.blackout || data.state !== 'running') && (
+    <div className='relative overflow-hidden'>
+      {special ? <GamePanel room={data} connected={connected} /> : <Stage config={data.config} scores={data.scores} remaining={data.remaining} live phase={data.state} countdown={data.countdown} playerCount={data.playerCount ?? data.players.length} playerUrl={mode === 'screen' ? playerUrl : undefined} connected={connected && !data.blackout} />}
+      {(data.blackout || (!special && data.config.mechanic !== 'race' && data.state !== 'running')) && (
         <div className='absolute inset-0 flex items-center justify-center bg-black/65 text-center text-white'>
           <div>
             <p className='text-3xl font-semibold'>
-              {data.blackout ? '画面暂时隐藏' : labels[data.state]}
+              {data.blackout ? '画面暂时隐藏' : data.config.mechanic === 'light' && data.state === 'completed' ? data.scores.reduce((sum, score) => sum + score, 0) >= (data.config.goal ?? 1000) ? '全场点亮成功！' : '时间到，本次点亮未达目标' : labels[data.state]}
             </p>
             <p className='mt-3'>联机测试 · 以服务端成绩为准</p>
           </div>
@@ -180,21 +222,29 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
       )}
     </div>
   );
+  if (mode === 'screen' && data.config.mechanic === 'race') return <main className='min-h-screen bg-[#e8f5ee] text-slate-800'>
+    {stage}
+    <details className='mx-auto max-w-7xl p-4 text-sm'>
+      <summary className='cursor-pointer text-slate-600'>投屏设置与连接状态</summary>
+      <div className='mt-4'>{status}<ScreenPresentation room={data} connected={connected} /><p className='break-all'>玩家入口：{playerUrl}</p></div>
+    </details>
+  </main>;
   if (mode === 'screen')
     return (
       <main className='mx-auto flex min-h-screen max-w-7xl flex-col justify-center p-5'>
         {status}
+        <ScreenPresentation room={data} connected={connected} />
         {stage}
-        <div className='mt-5 grid grid-cols-2 gap-3 md:grid-cols-4'>
+        {!['race', 'draw'].includes(data.config.mechanic) && <div className='mt-5 grid grid-cols-2 gap-3 md:grid-cols-4'>
           {teams.map((name, i) => (
             <div key={name} className='rounded-xl border p-5 text-xl'>
               {name}
               <strong className='float-right'>{data.scores[i]}</strong>
             </div>
           ))}
-        </div>
+        </div>}
         <p className='mt-5 text-center text-sm'>
-          玩家入口：{typeof window !== 'undefined' ? window.location.origin : ''}/live/play/{id}
+          玩家入口：{playerUrl}
         </p>
         {data.state === 'waiting' && <div className='mx-auto mt-4 bg-white p-4'><QRCodeSVG value={playerUrl} size={160} marginSize={4} title='扫码加入本局' /></div>}
       </main>
@@ -237,7 +287,7 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
               {(pending) => (
                 <Button
                   className='h-12 w-full'
-                  disabled={pending || !connected || data.state !== 'waiting'}
+                  disabled={pending || !connected || data.state !== 'waiting' || !!data.countdown}
                   type='submit'
                 >
                   {pending ? '加入中…' : '加入活动'}
@@ -264,15 +314,15 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
                 </div>
               </div>
             </div>
-            <Button
+            {special ? <GamePanel room={data} playerId={player?.id} connected={connected} /> : data.config.mechanic === 'race' && data.config.inputMode === 'shake' ? <ShakeInput disabled={!connected || !player || data.state !== 'running' || busy} onInput={(kind) => void tap(kind)} /> : data.config.mechanic === 'alternating' ? <div className='my-8 space-y-3'><p className='text-center'>左右交替点击 · 建议下一次：{nextSide === 'left' ? '左' : '右'}</p><div className='grid grid-cols-2 gap-4'>{(['left', 'right'] as const).map((side) => <Button key={side} className='h-36 touch-manipulation text-3xl' variant={side === nextSide ? 'default' : 'outline'} disabled={!connected || !player || data.state !== 'running' || busy} onClick={() => tap(side)}>{side === 'left' ? '左' : '右'}</Button>)}</div></div> : data.config.mechanic === 'money' ? <MoneyInput disabled={!connected || !player || data.state !== 'running' || busy} onSwipe={() => tap()} /> : <Button
               className='my-8 h-48 w-full touch-manipulation select-none rounded-full text-2xl active:scale-95'
               disabled={!connected || !player || data.state !== 'running'}
-              onClick={tap}
+              onClick={() => tap()}
             >
-              {data.state === 'running' ? '点击，为战队加速！' : labels[data.state]}
-            </Button>
+              {data.state === 'running' ? data.config.mechanic === 'light' ? '贡献能量，一起点亮！' : '点击，为战队加速！' : labels[data.state]}
+            </Button>}
             <p className='text-center text-xs text-muted-foreground'>
-              每次有效点击 +1 分 · 服务端限速 · 断线不补发
+              {special ? '规则由服务器判定 · 断线请等待重连' : '每次有效操作 +1 分 · 服务端限速 · 断线不补发'}
             </p>
             {ended && (
               <div className='mt-6 rounded-xl border p-5'>
@@ -296,15 +346,26 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
         pageDescription='联机主持台 · FastAPI 权威计时计分 · 开发测试，不是正式活动服务'
       >
         {status}
+        {data.agendaId && cloudToken() && <PageError><Suspense fallback={<p>正在读取整场控制…</p>}><HostAgenda agendaId={data.agendaId} roomId={id} ended={ended} /></Suspense></PageError>}
+        {ended && <div className='mb-5 flex flex-wrap gap-3'>
+          <Link href='/dashboard/cloud' className='p-2 underline'>返回整场编排 / 下一环节</Link>
+          {!data.agendaId && <Button disabled={busy || !hasOwner} onClick={async () => { setBusy(true); setError(''); try { const room = await rematchLiveRoom(id); router.push(`/live/host/${room.id}`); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }}>相同规则再来一局</Button>}
+          <Button variant='outline' onClick={() => {
+            const content = JSON.stringify({ roomId: id, name: data.config.name, state: data.state, game: data.game, teams: teams.map((name, i) => ({ name, score: data.scores[i] })), players: ranking, exportedAt: new Date().toISOString() }, null, 2);
+            const url = URL.createObjectURL(new Blob([content], { type: 'application/json' }));
+            const a = document.createElement('a'); a.href = url; a.download = `eventplay-result-${id}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+          }}>导出本局成绩 JSON</Button>
+          <p className='w-full text-xs text-muted-foreground'>{data.agendaId ? '请返回整场编排推进下一环节；整场入口会自动换场，无需重新扫码。' : '新局使用新二维码，玩家须重新入场。上一局成绩保留；若需更换规则，请回活动编辑器。'}</p>
+        </div>}
         <p className='mb-4 break-all text-sm'>联机房间：{id} · 主持端、玩家端与大屏必须使用同一个房间 ID。</p>
         <div className='mb-5 flex flex-wrap gap-4'>
           <Link className='underline' href='/host'>
             返回活动选择
           </Link>
-          <Link className='underline' target='_blank' href={`/live/screen/${id}`}>
+          <Link className='underline' target='_blank' href={data.agendaId ? `/live/event-screen/${data.agendaId}` : `/live/screen/${id}`}>
             打开联机大屏
           </Link>
-          <Link className='underline' target='_blank' href={`/live/play/${id}`}>
+          <Link className='underline' target='_blank' href={data.agendaId ? `/live/event/${data.agendaId}` : `/live/play/${id}`}>
             打开玩家端
           </Link>
         </div>
@@ -343,9 +404,12 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
           <Card>
             <CardContent>
               <p>剩余时间</p>
+              {data.state === 'waiting' && !data.countdown && <fieldset className='mt-3 space-y-2 rounded-lg border p-3'><legend className='text-sm font-semibold'>开场检查（主持人手动确认）</legend>{['大屏画面已正确投放','音量与游戏规则已确认'].map((item)=><label key={item} className='flex items-center gap-2 text-sm'><input type='checkbox' checked={checks.includes(item)} onChange={(e)=>setChecks((old)=>e.target.checked?[...old,item]:old.filter((text)=>text!==item))} />{item}</label>)}<p className='text-xs text-muted-foreground'>在线状态来自最近15秒心跳，切后台可能离线。大屏页面连接不代表投影设备或音量正常，仍需目视确认。</p></fieldset>}
               {data.state === 'waiting' && <p className='mt-3 text-sm'>{!hasOwner ? '请先恢复主持权限。' : !connected ? '连接恢复后才可开始。' : !data.players.length ? '等待至少一位玩家加入后，即可开始比赛。' : `已有 ${data.players.length} 人入场，可以开始比赛。`}</p>}
               <p className='my-5 font-mono text-6xl'>{data.remaining}s</p>
               <div className='flex flex-wrap gap-3'>
+                {!!data.countdown && <Button variant='outline' disabled={busy || !connected || !hasOwner} onClick={()=>command('cancel_countdown')}>取消倒计时，重新开放入场</Button>}
+                {data.config.mechanic === 'draw' && data.state === 'running' && <Button disabled={busy || !connected || !hasOwner} onClick={() => setConfirm('draw')}>抽取并锁定结果</Button>}
                 {(data.state === 'waiting'
                   ? [['start', '开始比赛']]
                   : data.state === 'running'
@@ -366,7 +430,7 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
                       busy ||
                       !connected ||
                       !ownerToken(id) ||
-                      (action === 'start' && !data.players.length)
+                      (action === 'start' && (!data.players.length || !!data.countdown || checks.length < 2))
                     }
                     onClick={() =>
                       ['start', 'finish'].includes(action) ? setConfirm(action) : command(action)
@@ -395,8 +459,8 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
               {confirm && (
                 <div role='alert' className='mt-4 rounded-lg border p-4'>
                   <p>
-                    {confirm === 'start'
-                      ? '确认所有玩家已入场并开始？开局后禁止新玩家加入。'
+                    {confirm === 'draw' ? '确认从本局入场名单中抽取？结果立即锁定，不能重抽。' : confirm === 'start'
+                      ? '确认所有玩家已入场？将开始服务端3秒倒计时，期间关闭新玩家入场，倒计时结束后才开始计分。'
                       : '确认结束本局？此操作不可恢复。'}
                   </p>
                   <Button

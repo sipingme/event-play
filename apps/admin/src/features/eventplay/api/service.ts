@@ -1,7 +1,71 @@
-import type { Activity, Brand, DemoRoom, GameConfig, Template } from './types';
+import type { Activity, Brand, DemoRoom, GameConfig, Template, PublicEvent } from './types';
 const KEY = 'eventplay.activities.v1';
 const ROOM_KEY = 'eventplay.rooms.v1';
+export const DEFAULT_QUIZ = 'EventPlay 的玩家从哪里加入？|扫码进入|修改服务器|安装数据库|联系开发者|A\n团队互动最重要的是什么？|共同参与|只有主持人操作|关闭网络|不看规则|A';
+export const CLOUD_KEY = 'eventplay.workspace.token';
+export function cloudToken(): string { return localStorage.getItem(CLOUD_KEY) || ''; }
+export async function cloudRequest<T>(path: string, body?: unknown, token = cloudToken()): Promise<T> {
+  const base = process.env.NEXT_PUBLIC_REALTIME_URL || (window.location.protocol === 'https:' ? `${window.location.origin}/realtime` : `${window.location.protocol}//${window.location.hostname}:8001`);
+  const response = await fetch(`${base}${path}`, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(10000)
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : '云服务请求失败，请检查连接和访问权限');
+  return result;
+}
+export async function connectCloud(token?: string): Promise<void> {
+  const key = token?.trim() || (await cloudRequest<{token: string}>('/workspaces', {})).token;
+  await cloudRequest('/activities', undefined, key);
+  localStorage.setItem(CLOUD_KEY, key);
+}
+export async function importLocalActivities(): Promise<number> {
+  if (!cloudToken()) throw new Error('请先连接云工作区');
+  const items = read<Activity[]>(KEY, []);
+  for (const item of items) await cloudRequest('/activities', { config: configOf(item), sourceId: item.id });
+  return items.length;
+}
+export interface ManagedRoom {
+  id: string; activityId: string; round: number; config: GameConfig;
+  state: DemoRoom['state']; players: { id: string }[]; scores: number[];
+}
+export async function listManagedRooms(): Promise<ManagedRoom[]> {
+  return cloudToken() ? cloudRequest<ManagedRoom[]>('/managed-rooms') : [];
+}
+export interface Agenda {
+  id: string; name: string; index: number;
+  steps: { activityId: string; name: string; version: number; roomId?: string }[];
+}
+export const listAgendas = () => cloudRequest<Agenda[]>('/agendas');
+export const getPublicEvent = (id: string) => cloudRequest<PublicEvent>(`/events/${encodeURIComponent(id)}`, undefined, '');
+export async function takeoverRoom(id: string) {
+  const result = await cloudRequest<{ room: { id: string }; token: string }>(`/rooms/${id}/takeover`, {});
+  localStorage.setItem(`eventplay.host.${result.room.id}`, result.token);
+  return result.room;
+}
+export const createAgenda = (name: string, activityIds: string[]) => cloudRequest<Agenda>('/agendas', { name, activityIds });
+export async function openAgenda(agenda: Agenda, next: boolean) {
+  const result = await cloudRequest<{ room: { id: string }; token: string }>(`/agendas/${agenda.id}/${next ? 'next' : 'host'}`, next ? { index: agenda.index } : {});
+  localStorage.setItem(`eventplay.host.${result.room.id}`, result.token);
+  return result.room.id;
+}
 export const templates: Template[] = [
+  { id: 'shake-race', name: '欢乐摇摇赛马', category: '摇一摇', description: '轻摇手机，让卡通小马为战队冲刺；不支持传感器时可点击备用。', mechanic: 'race', inputMode: 'shake', featured: true, theme: 'garden', teams: '阳光队,闪电队,追风队', duration: 60 },
+  { id: 'swipe-money', name: '财富滑滑乐', category: '滑屏', description: '向上滑动财富卡，一划一分。比手速，不涉及现金奖励。', mechanic: 'money', featured: true, theme: 'gold', teams: '招财队,丰收队', duration: 60 },
+  { id: 'click-sprint', name: '左右冲刺赛', category: '点击', description: '左右交替迈步，为战队积累步数；连续同侧不计分。', mechanic: 'alternating', featured: true, theme: 'garden', teams: '活力队,飞跃队', duration: 60 },
+  { id: 'reaction-mole', name: '萌鼠出没', category: '手眼协调', description: '看准九宫格里的小地鼠，每轮只能出手一次，命中得分。', mechanic: 'reaction', featured: true, theme: 'garden', teams: '眼力队,敏捷队', duration: 60 },
+  { id: 'control-coins', name: '接住好运', category: '控制', description: '左右移动篮子，接住三条轨道里的金币；服务器统一判定。', mechanic: 'catch', featured: true, theme: 'gold', teams: '好运队,宝藏队', duration: 60 },
+  { id: 'quiz-space', name: '品牌知识闯关', category: '知识互动', description: '分题限时作答，每题结算后计分，支持自定义单选题。', mechanic: 'quiz', theme: 'space', teams: '智慧队,探索队', duration: 60 },
+  { id: 'draw-gold', name: '现场幸运抽奖', category: '抽奖互动', description: '从已入场玩家中随机抽取，结果锁定，无实际奖品发放。', mechanic: 'draw', theme: 'gold', teams: '来宾一组,来宾二组', duration: 120 },
+  { id: 'catch-garden', name: '接金币大作战', category: '动作游戏', description: '左右移动接住金币，每次接到加一分，由服务器判定。', mechanic: 'catch', theme: 'garden', teams: '金币队,宝藏队', duration: 60 },
+  { id: 'alternating-space', name: '左右冲刺', category: '节奏协作', description: '左右交替点击，为战队加速；连续同侧不计分。', mechanic: 'alternating', theme: 'space', teams: '星河队,闪电队', duration: 90 },
+  { id: 'light-gold', name: '共同点亮品牌', category: '全场共创', description: '全场一起贡献能量，达成目标后共同点亮品牌。', mechanic: 'light', theme: 'gold', teams: '星光队,热爱队', duration: 120 },
+  {
+    id: 'money-gold', name: '数钱挑战', category: '滑动互动',
+    description: '向上划动品牌卡片，为团队积累财富积分。无现金奖励。',
+    mechanic: 'money', theme: 'gold', teams: '招财队,好运队,丰收队', duration: 60
+  },
   {
     id: 'race-gold',
     name: '全员冲刺',
@@ -60,11 +124,22 @@ function write<T>(key: string, data: T): void {
   }
 }
 export function configOf(a: GameConfig): GameConfig {
-  const { name, description, mechanic, theme, duration, participants, teams, brand, logo } = a;
-  return { name, description, mechanic, theme, duration, participants, teams, brand, logo };
+  const { name, description, mechanic, theme, duration, participants, teams, brand, logo, goal, quizText, winnerCount } = a;
+  return { name, description, mechanic, theme, duration, participants, teams, brand, logo, inputMode: a.inputMode ?? 'tap', goal: goal ?? 1000, quizText: quizText ?? DEFAULT_QUIZ, winnerCount: winnerCount ?? 1, prizeName: a.prizeName ?? '幸运奖', catchDifficulty: a.catchDifficulty ?? 'normal' };
 }
 export function validateConfig(value: GameConfig): string[] {
   const errors: string[] = [];
+  if (!['race', 'tug', 'money', 'alternating', 'light', 'quiz', 'draw', 'catch', 'reaction'].includes(value.mechanic)) errors.push('不支持的玩法');
+  if (!['tap', 'shake'].includes(value.inputMode ?? 'tap')) errors.push('输入方式无效');
+  if (!['easy', 'normal', 'hard'].includes(value.catchDifficulty ?? 'normal')) errors.push('接金币难度无效');
+  if (!(value.prizeName ?? '幸运奖').trim() || (value.prizeName ?? '幸运奖').length > 60) errors.push('奖项名称须为1～60字');
+  if (value.mechanic === 'draw' && (!Number.isInteger(value.winnerCount ?? 1) || (value.winnerCount ?? 1) < 1 || (value.winnerCount ?? 1) > Math.min(100, value.participants))) errors.push('中奖名额须为1～100，且不超过预计人数');
+  if (value.mechanic === 'quiz') {
+    const lines = (value.quizText ?? DEFAULT_QUIZ).split('\n').filter((s) => s.trim());
+    if (!lines.length || lines.length > 20 || value.duration < lines.length * 5) errors.push('需要1～20题，每题至少5秒');
+    if (lines.some((line) => { const p = line.split('|').map((s) => s.trim()); return p.length !== 6 || p.some((s) => !s) || !/^[ABCD]$/i.test(p[5]) || p[0].length > 200 || p.slice(1, 5).some((s) => s.length > 100); })) errors.push('题目格式或长度错误：题目|A选项|B选项|C选项|D选项|正确字母');
+  }
+  if (value.goal !== undefined && (!Number.isInteger(value.goal) || value.goal < 10 || value.goal > 100000)) errors.push('共同目标须为 10～100000 的整数');
   if (!value.name.trim() || value.name.length > 60) errors.push('活动名称须为 1～60 个字符');
   if (!Number.isFinite(value.duration) || value.duration < 30 || value.duration > 600)
     errors.push('时长须为 30～600 秒');
@@ -85,7 +160,7 @@ export function validateConfig(value: GameConfig): string[] {
   return errors;
 }
 function seed(): Activity[] {
-  return templates.slice(0, 2).map((t, i) => ({
+  return templates.filter((t) => ['race-gold', 'tug-space'].includes(t.id)).map((t, i) => ({
     id: `sample-${i + 1}`,
     name: i ? '新品发布 · 能量争夺战' : '年度盛典 · 全员冲刺',
     description: t.description,
@@ -102,6 +177,7 @@ function seed(): Activity[] {
   }));
 }
 export async function listActivities(): Promise<Activity[]> {
+  if (cloudToken()) return cloudRequest<Activity[]>('/activities');
   return read(KEY, seed());
 }
 export async function getActivity(id: string): Promise<Activity> {
@@ -112,6 +188,7 @@ export async function getActivity(id: string): Promise<Activity> {
 export async function createActivity(config: GameConfig): Promise<Activity> {
   const errors = validateConfig(config);
   if (errors.length) throw new Error(errors.join('；'));
+  if (cloudToken()) return cloudRequest<Activity>('/activities', { config });
   const item: Activity = {
     ...config,
     id: crypto.randomUUID(),
@@ -129,6 +206,7 @@ export async function saveActivity(
 ): Promise<Activity> {
   const errors = validateConfig(config);
   if (errors.length) throw new Error(errors.join('；'));
+  if (cloudToken()) return cloudRequest<Activity>(`/activities/${id}/save`, { config, revision });
   const items = await listActivities();
   const old = items.find((a) => a.id === id);
   if (!old) throw new Error('活动不存在');
@@ -141,6 +219,11 @@ export async function saveActivity(
   return item;
 }
 export async function archiveActivity(id: string): Promise<void> {
+  if (cloudToken()) {
+    const item = await getActivity(id);
+    await cloudRequest(`/activities/${id}/archive`, { revision: item.revision });
+    return;
+  }
   if (
     (await listRooms()).some(
       (r) => r.activityId === id && !['completed', 'aborted'].includes(r.state)
@@ -154,6 +237,7 @@ export async function archiveActivity(id: string): Promise<void> {
 }
 export async function publishDemo(id: string): Promise<Activity> {
   const item = await getActivity(id);
+  if (cloudToken()) return cloudRequest<Activity>(`/activities/${id}/publish`, { revision: item.revision });
   const errors = validateConfig(item);
   if (errors.length) throw new Error(errors.join('；'));
   const next = {

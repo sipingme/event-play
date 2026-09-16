@@ -24,8 +24,9 @@ import {
 const links = [
   { name: '工作台', path: '/dashboard', icon: Icons.dashboard },
   { name: '我的活动', path: '/dashboard/activities', icon: Icons.calendar },
+  { name: '云工作区与房间', path: '/dashboard/cloud', icon: Icons.video },
   { name: '主持人端', path: '/host', icon: Icons.video },
-  { name: '玩法模板', path: '/dashboard/templates', icon: Icons.galleryVerticalEnd },
+  { name: '游戏体验库', path: '/dashboard/templates', icon: Icons.galleryVerticalEnd },
   { name: '品牌素材', path: '/dashboard/brands', icon: Icons.palette },
   { name: '活动报告', path: '/dashboard/reports', icon: Icons.trendingUp }
 ];
@@ -60,7 +61,7 @@ export function ClientReady({ children }: { children: ReactNode }) {
     <Suspense
       fallback={
         <div role='status' className='p-8 text-muted-foreground'>
-          正在读取本地演示数据…
+          正在读取活动数据…
         </div>
       }
     >
@@ -150,7 +151,7 @@ export function EventShell({ children }: { children: ReactNode }) {
             </span>
             <div>
               <p className='text-sm'>体验工作区</p>
-              <p className='text-xs text-muted-foreground'>本地数据 · 无真实账号</p>
+              <p className='text-xs text-muted-foreground'>预览版 · 支持云工作区</p>
             </div>
           </div>
         </SidebarFooter>
@@ -174,7 +175,7 @@ export function EventShell({ children }: { children: ReactNode }) {
           </div>
         </header>
         <div className='border-b bg-muted/50 px-4 py-2 text-xs leading-5 text-muted-foreground md:px-6'>
-          本地演示：数据保存在当前浏览器。AI、微信入场与正式发布尚未接入。
+          预览版：未连接云工作区时，活动保存在本机；连接后保存至后端。支持 H5 联机，正式账号、微信登录与 AI 尚未接入。
         </div>
         <main className='min-w-0 flex-1 py-5'>
           <PageError key={pathname}>
