@@ -1,0 +1,18 @@
+[Unit]
+Description=EventPlay FastAPI realtime
+After=network.target
+[Service]
+Type=simple
+User=eventplay
+Group=eventplay
+WorkingDirectory=/opt/eventplay/current/apps/api
+Environment=EVENTPLAY_DB=/var/lib/eventplay/eventplay.sqlite3
+Environment=EVENTPLAY_ORIGINS=https://event.siping.me
+ExecStart=/opt/eventplay/current/apps/api/.venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8002 --workers 1
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+[Install]
+WantedBy=multi-user.target

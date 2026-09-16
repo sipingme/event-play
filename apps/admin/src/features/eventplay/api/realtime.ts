@@ -19,7 +19,9 @@ export interface PlayerSession {
 export function apiBase() {
   return (
     process.env.NEXT_PUBLIC_REALTIME_URL ||
-    `${window.location.protocol}//${window.location.hostname}:8001`
+    (window.location.protocol === 'https:'
+      ? `${window.location.origin}/realtime`
+      : `${window.location.protocol}//${window.location.hostname}:8001`)
   );
 }
 export async function liveRequest<T>(path: string, body?: unknown, token?: string): Promise<T> {

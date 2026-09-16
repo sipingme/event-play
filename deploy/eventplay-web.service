@@ -1,0 +1,18 @@
+[Unit]
+Description=EventPlay Next.js web
+After=network.target
+[Service]
+Type=simple
+User=eventplay
+Group=eventplay
+WorkingDirectory=/opt/eventplay/current/apps/admin
+Environment=NODE_ENV=production
+Environment=NEXT_TELEMETRY_DISABLED=1
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 4181
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+[Install]
+WantedBy=multi-user.target
