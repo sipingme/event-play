@@ -37,6 +37,15 @@ class RealtimeTests(unittest.TestCase):
         with self.client.websocket_connect(f'/rooms/{self.rid}/stream') as ws:
             self.assertEqual(ws.receive_json()['id'], self.rid)
 
+    def test_owner_recovery_verification(self):
+        path = f'/rooms/{self.rid}/owner'
+        before = self.client.get(f'/rooms/{self.rid}').json()
+        self.assertEqual(self.client.get(path).status_code, 403)
+        self.assertEqual(self.client.get(path, headers=self.join()).status_code, 403)
+        self.assertEqual(self.client.get(path, headers={'Authorization': 'Bearer wrong'}).status_code, 403)
+        self.assertEqual(self.client.get(path, headers=self.host).json(), {'verified': True})
+        self.assertEqual(self.client.get(f'/rooms/{self.rid}').json()['state'], before['state'])
+
     def test_phase_dedupe_pause_and_end(self):
         p1, p2 = self.join(0), self.join(1)
         self.assertFalse(self.tap(p1, 1)['accepted'])

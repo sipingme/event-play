@@ -216,6 +216,12 @@ def create_app(path=None):
         async with lock:
             return engine.tap(rid, bearer(authorization), data.seq)
 
+    @app.get('/rooms/{rid}/owner')
+    async def verify_owner(rid: str, authorization: str = Header(default='')):
+        async with lock:
+            engine.owner(engine.get(rid), bearer(authorization))
+            return {'verified': True}
+
     @app.post('/rooms/{rid}/command')
     async def command(rid: str, data: Command, authorization: str = Header(default='')):
         async with lock:

@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { activityQuery, eventKeys, roomQuery, roomsQuery } from '../api/queries';
-import { commandRoom, createRoom, publishDemo, validateConfig } from '../api/service';
+import { commandRoom, publishDemo, validateConfig } from '../api/service';
+import { enterActivityRoom } from '../api/realtime';
 import type { DemoRoom } from '../api/types';
 import { Stage } from './stage';
 import { HostScreen } from './host';
@@ -38,8 +39,9 @@ export function Publish({ id }: { id: string }) {
         await client.invalidateQueries({ queryKey: eventKeys.all });
         toast.success('已保存本地演示版本');
       } else {
-        const room = await createRoom(id);
-        router.push(`/host/${room.id}`);
+        if (!data.release) throw new Error('请先保存活动版本');
+        const room = await enterActivityRoom(id, data.release.config);
+        router.push(`/live/host/${room.id}`);
       }
     } catch (e) {
       setError((e as Error).message);
@@ -50,7 +52,7 @@ export function Publish({ id }: { id: string }) {
   return (
     <PageContainer
       pageTitle='发布与入场'
-      pageDescription='确认活动配置，保存版本，再进入现场演示。'
+      pageDescription='保存活动版本，进入联机主持端，分享二维码让玩家加入。'
       pageHeaderAction={
         <Button
           nativeButton={false}
@@ -105,7 +107,7 @@ export function Publish({ id }: { id: string }) {
               disabled={busy || !data.release}
               onClick={() => run('room')}
             >
-              进入演示控制台 <Icons.arrowRight />
+              进入联机主持端 <Icons.arrowRight />
             </Button>
           </CardContent>
         </Card>
@@ -115,8 +117,7 @@ export function Publish({ id }: { id: string }) {
           <Icons.lock className='size-4' /> 正式发布尚未启用
         </h3>
         <p className='mt-2 text-sm leading-6 text-muted-foreground'>
-          此操作仅保存当前浏览器中的配置快照，不会创建真实活动。微信小程序码、多人连接和正式发布需要
-          FastAPI 与小程序接入后启用。
+          活动配置保存在当前浏览器。联机主持端连接实时后端，支持 H5 玩家扫码加入；正式账号、微信身份及奖品服务尚未接入。旧模拟彩排请从主持端首页的次要入口进入。
         </p>
       </div>
     </PageContainer>

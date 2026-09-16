@@ -46,10 +46,23 @@ export const liveQuery = (id: string) =>
     queryFn: () => liveRequest<LiveRoom>(`/rooms/${id}`),
     retry: 1
   });
-export async function createLiveRoom(config: GameConfig) {
+export async function createLiveRoom(config: GameConfig, activityId?: string) {
   const result = await liveRequest<{ room: LiveRoom; token: string }>('/rooms', config);
   localStorage.setItem(`eventplay.host.${result.room.id}`, result.token);
+  if (activityId) localStorage.setItem(`eventplay.activity-room.${activityId}`, result.room.id);
   return result.room;
+}
+export async function enterActivityRoom(activityId: string, config: GameConfig) {
+  const id = localStorage.getItem(`eventplay.activity-room.${activityId}`);
+  if (id) {
+    const room = await liveRequest<LiveRoom>(`/rooms/${id}`);
+    if (!['completed', 'aborted'].includes(room.state)) return room;
+  }
+  return createLiveRoom(config, activityId);
+}
+export async function restoreOwner(id: string, token: string) {
+  await liveRequest(`/rooms/${id}/owner`, undefined, token.trim());
+  localStorage.setItem(`eventplay.host.${id}`, token.trim());
 }
 export function ownerToken(id: string) {
   return localStorage.getItem(`eventplay.host.${id}`) || '';

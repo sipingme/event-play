@@ -14,7 +14,7 @@ import { createRoom, hostChecks, hostCommand, updateHost } from '../api/service'
 import type { DemoRoom } from '../api/types';
 import { ClientReady, PageError } from './shell';
 import { Stage } from './stage';
-import { createLiveRoom } from '../api/realtime';
+import { enterActivityRoom } from '../api/realtime';
 import type { GameConfig } from '../api/types';
 
 const labels = {
@@ -75,7 +75,7 @@ export function HostLobby() {
     setBusy(id);
     setError('');
     try {
-      const room = await createLiveRoom(config);
+      const room = await enterActivityRoom(id, config);
       router.push(`/live/host/${room.id}`);
     } catch (e) {
       setError(`实时后端连接失败或创建失败：${(e as Error).message}`);
@@ -137,20 +137,20 @@ export function HostLobby() {
                   {item.release!.config.mechanic === 'race' ? '团队竞速' : '团队拔河'} ·{' '}
                   {item.release!.config.duration} 秒 · 预计 {item.release!.config.participants} 人
                 </p>
-                <Button className='h-12 w-full' disabled={!!busy} onClick={() => enter(item.id)}>
-                  {busy === item.id ? '正在准备…' : '进入主持人端'}
+                <Button className='h-12 w-full' disabled={!!busy} onClick={() => enterLive(item.id, item.release!.config)}>
+                  {busy === item.id ? '正在准备…' : '进入联机主持端'}
                   <Icons.arrowRight />
                 </Button>
                 <p className='text-xs text-muted-foreground'>
-                  继续未结束的局次；上一局已结束时新建彩排。
+                  继续本活动未结束的联机房间；结束后创建新局。进入后分享玩家二维码，再开始比赛。
                 </p>
                 <Button
                   variant='outline'
                   className='h-12 w-full'
                   disabled={!!busy}
-                  onClick={() => enterLive(item.id, item.release!.config)}
+                  onClick={() => enter(item.id)}
                 >
-                  新建联机房间（真实点击）
+                  仅本地彩排（玩家无法加入）
                 </Button>
               </CardContent>
             </Card>
@@ -198,8 +198,13 @@ export function HostDesk({ id }: { id: string }) {
   return (
     <PageContainer
       pageTitle={data.config.name}
-      pageDescription={`主持人控制台 · 演示 v${data.version} · 房间 ${id.slice(0, 8)}`}
+      pageDescription={`本地模拟彩排 · 玩家无法加入 · 演示 v${data.version}`}
     >
+      <div className='mb-5 rounded-xl border border-amber-500 p-5'>
+        <strong>这里不是联机主持端，不能控制手机玩家。</strong>
+        <p className='mt-2 text-sm'>请返回活动选择，使用「进入联机主持端」。已有玩家等待时，请使用与玩家相同房间 ID 的联机主持链接，不要另建一局。</p>
+        <Link href='/host' className='mt-3 inline-block underline'>返回活动选择 →</Link>
+      </div>
       <div className='mb-5 flex flex-wrap items-center justify-between gap-3'>
         <div className='flex flex-wrap gap-2'>
           <Badge>{labels[data.state]}</Badge>

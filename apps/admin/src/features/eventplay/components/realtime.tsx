@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { QRCodeSVG } from 'qrcode.react';
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -14,6 +15,7 @@ import {
   liveKey,
   liveQuery,
   ownerToken,
+  restoreOwner,
   playerSession,
   tapLiveRoom,
   type LiveRoom
@@ -89,6 +91,31 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [hasOwner, setHasOwner] = useState(() => !!ownerToken(id));
+  const [notice, setNotice] = useState('');
+  const playerUrl = `${window.location.origin}/live/play/${id}`;
+  const recoveryForm = useAppForm({
+    defaultValues: { token: '' },
+    onSubmit: async ({ value }) => {
+      setError('');
+      try {
+        await restoreOwner(id, value.token);
+        setHasOwner(true);
+        recoveryForm.reset();
+        setNotice('主持权限已验证并恢复到当前浏览器');
+      } catch {
+        setError('恢复失败：请检查房间、主持凭证和网络；玩家凭证不能恢复主持权限。');
+      }
+    }
+  });
+  async function copy(value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setNotice('已复制，请妥善保管');
+    } catch {
+      setError('无法访问剪贴板，请手动复制玩家链接；主持凭证请使用原浏览器操作。');
+    }
+  }
   const teams = data.config.teams.split(',');
   const player = data.players.find((p) => p.id === session?.playerId);
   const ended = data.state === 'completed' || data.state === 'aborted';
@@ -169,6 +196,7 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
         <p className='mt-5 text-center text-sm'>
           玩家入口：{typeof window !== 'undefined' ? window.location.origin : ''}/live/play/{id}
         </p>
+        {data.state === 'waiting' && <div className='mx-auto mt-4 bg-white p-4'><QRCodeSVG value={playerUrl} size={160} marginSize={4} title='扫码加入本局' /></div>}
       </main>
     );
   if (mode === 'play')
@@ -176,6 +204,7 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
       <main className='mx-auto min-h-screen max-w-md bg-background px-5 py-8'>
         <p className='mb-4 text-sm font-semibold'>EventPlay · 一起为团队加速</p>
         <h1 className='mb-3 text-2xl font-semibold'>{data.config.name}</h1>
+        <p className='mb-3 break-all text-xs text-muted-foreground'>房间：{id}</p>
         {status}
         <p className='mb-6 text-xs leading-5 text-muted-foreground'>
           开发联调玩家入口 · 游客身份，不是微信登录。仅输入测试昵称。
@@ -219,6 +248,7 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
           </form>
         ) : (
           <>
+            {data.state === 'waiting' && <div role='status' className='mb-5 rounded-xl border bg-muted p-5'><strong>已成功入场，请等待主持人开始</strong><p className='mt-2 text-sm'>无需重复加入。你的队伍：{player ? teams[player.team] : '正在同步'}。如长时间未开场，请向主持人确认房间 ID：{id}。</p></div>}
             <div className='rounded-2xl border p-5'>
               <p>
                 {player?.name || '正在恢复身份…'} · {player ? teams[player.team] : ''}
@@ -266,6 +296,7 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
         pageDescription='联机主持台 · FastAPI 权威计时计分 · 开发测试，不是正式活动服务'
       >
         {status}
+        <p className='mb-4 break-all text-sm'>联机房间：{id} · 主持端、玩家端与大屏必须使用同一个房间 ID。</p>
         <div className='mb-5 flex flex-wrap gap-4'>
           <Link className='underline' href='/host'>
             返回活动选择
@@ -277,15 +308,31 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
             打开玩家端
           </Link>
         </div>
-        <p className='mb-5 break-all rounded-lg border p-3 text-sm'>
-          玩家链接：{typeof window !== 'undefined' ? window.location.origin : ''}/live/play/{id}
-          （手机不能使用 127.0.0.1；局域网配置见 README）
-        </p>
-        {!ownerToken(id) && (
+        <div className='mb-5 flex flex-wrap items-center gap-5 rounded-xl border p-5'>
+          <div className='bg-white p-2'><QRCodeSVG value={playerUrl} size={160} marginSize={4} title='玩家入场二维码' /></div>
+          <div className='min-w-0 flex-1 space-y-3'>
+            <h2 className='font-semibold'>1. 扫码加入 → 2. 确认入场人数 → 3. 开始比赛</h2>
+            <p className='break-all text-sm'>{playerUrl}</p>
+            <Button variant='outline' onClick={() => copy(playerUrl)}>复制玩家链接</Button>
+            <p className='text-xs text-muted-foreground'>预览站点仍需访问密码。手机请使用线上域名或可访问的局域网地址，不能使用 127.0.0.1。</p>
+          </div>
+        </div>
+        {notice && <p role='status' className='mb-4 text-sm'>{notice}</p>}
+        {!hasOwner && (
           <p role='alert' className='mb-4 text-destructive'>
             当前浏览器无主持人凭证，只能观看，不能控制。
           </p>
         )}
+        <details className='mb-5 rounded-xl border p-4'>
+          <summary className='cursor-pointer font-medium'>主持权限备份与恢复</summary>
+          <p className='my-3 text-sm text-muted-foreground'>凭证等同房间控制钥匙，请私下保存，不要发给玩家。当前尚未接入账号找回；凭证和浏览器数据同时丢失时无法恢复。</p>
+          {hasOwner ? <Button variant='outline' onClick={() => copy(ownerToken(id))}>复制主持恢复凭证（保密）</Button> : (
+            <form className='space-y-3' onSubmit={(event) => { event.preventDefault(); recoveryForm.handleSubmit(); }}>
+              <recoveryForm.AppField name='token'>{(field) => <field.TextField label='主持恢复凭证' type='password' required />}</recoveryForm.AppField>
+              <recoveryForm.Subscribe selector={(s) => s.isSubmitting}>{(pending) => <Button type='submit' disabled={pending}>验证并恢复主持权限</Button>}</recoveryForm.Subscribe>
+            </form>
+          )}
+        </details>
         {error && (
           <p role='alert' className='mb-4 text-destructive'>
             {error}
@@ -296,6 +343,7 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
           <Card>
             <CardContent>
               <p>剩余时间</p>
+              {data.state === 'waiting' && <p className='mt-3 text-sm'>{!hasOwner ? '请先恢复主持权限。' : !connected ? '连接恢复后才可开始。' : !data.players.length ? '等待至少一位玩家加入后，即可开始比赛。' : `已有 ${data.players.length} 人入场，可以开始比赛。`}</p>}
               <p className='my-5 font-mono text-6xl'>{data.remaining}s</p>
               <div className='flex flex-wrap gap-3'>
                 {(data.state === 'waiting'
