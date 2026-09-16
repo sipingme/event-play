@@ -1,0 +1,5 @@
+{
+  "pages": ["pages/play/play"],
+  "window": { "navigationBarTitleText": "EventPlay 玩家端", "navigationBarBackgroundColor": "#111111", "navigationBarTextStyle": "white", "backgroundColor": "#f6f6f6" },
+  "style": "v2"
+}

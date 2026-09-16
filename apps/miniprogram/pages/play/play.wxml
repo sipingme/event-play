@@ -1,0 +1,25 @@
+<view class="page">
+  <view class="brand">EventPlay · 全场一起开玩</view>
+  <view class="notice">开发联调游客版 · 不是微信登录 · 仅使用测试昵称</view>
+  <view wx:if="{{!room}}">
+    <input placeholder="主持人提供的房间 ID" value="{{roomId}}" bindinput="inputRoom" />
+    <button bindtap="loadRoom" disabled="{{busy}}">读取活动</button>
+  </view>
+  <view wx:else>
+    <view class="title">{{room.config.name}}</view>
+    <view class="notice">{{connected ? '实时连接' : '断线重连中，请稍候'}} · 已入场 {{room.players.length}} 人</view>
+    <view wx:if="{{!joined}}">
+      <input placeholder="测试昵称（最多16字）" maxlength="16" bindinput="inputName" />
+      <picker range="{{teams}}" value="{{team}}" bindchange="chooseTeam"><view class="picker">我的战队：{{teams[team]}} ▾</view></picker>
+      <button bindtap="join" disabled="{{busy || !connected || room.state !== 'waiting'}}">加入活动</button>
+      <view wx:if="{{room.state !== 'waiting'}}" class="notice">已开场，禁止新加入</view>
+    </view>
+    <view wx:else>
+      <view class="card"><view>{{player.name}} · {{teams[player.team]}}</view><view class="stats">我的贡献 {{player.score || 0}}<text>剩余 {{room.remaining}}s</text></view></view>
+      <button class="tap" bindtap="tap" disabled="{{!connected || !player || room.state !== 'running'}}">{{actionText}}</button>
+      <view class="notice">服务端计分 · 每次有效点击 +1 · 断线不补发</view>
+      <view class="card" wx:if="{{room.state === 'completed' || room.state === 'aborted'}}">{{room.state === 'aborted' ? '本局中止，不评定胜负' : '本局贡献战报'}}<view>我的贡献：{{player.score || 0}} 分</view></view>
+    </view>
+  </view>
+  <view class="error">{{error}}</view>
+</view>

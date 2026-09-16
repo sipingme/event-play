@@ -1,0 +1,8 @@
+{
+  "appid": "touristappid",
+  "projectname": "EventPlay-player-dev",
+  "compileType": "miniprogram",
+  "miniprogramRoot": "./",
+  "setting": { "es6": true, "urlCheck": false },
+  "description": "仅开发联调游客版，正式微信身份待接入"
+}

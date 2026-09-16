@@ -1,0 +1,78 @@
+# EventPlay 实时联调 MVP
+
+## 本次实现
+
+- `apps/api`：Python/FastAPI + WebSocket 状态流 + SQLite 持久化。单进程运行，无 Redis/Kafka。
+- `apps/admin`：主持人入口新增“新建联机房间”，独立联机主持台、大屏与手机网页玩家端。
+- `apps/miniprogram`：微信小程序开发工程，支持房间读取、测试昵称、队伍选择、点击贡献、暂停、结算及重连。
+- 旧 localStorage 彩排仍保留；联机局不使用模拟分数，不混入旧模拟报告。
+
+**开发联调版，不是可直接商用的多人活动服务。小程序采用游客测试身份，并未接入 wx.login/code2Session。网页是联调替代入口，不取代正式小程序产品。**
+
+## 本机启动
+
+终端一：
+
+```powershell
+cd D:\2026\eventplay\apps\api
+python -m venv .venv
+.\.venv\Scripts\python -m pip install -r requirements.txt
+.\.venv\Scripts\python -m uvicorn main:app --host 127.0.0.1 --port 8001 --workers 1
+```
+
+终端二：
+
+```powershell
+cd D:\2026\eventplay\apps\admin
+npm run dev -- --hostname 127.0.0.1 --port 4180
+```
+
+1. 打开 `http://127.0.0.1:4180/host`，选择已保存演示版本的活动，点击“新建联机房间”。
+2. 在联机主持台点击“打开玩家端”，输入测试昵称和队伍。可用另一浏览器/无痕窗口测试第二名玩家。
+3. 主持人确认开始。玩家点击后，主持台与联机大屏显示服务端分数。
+4. 暂停不计分，恢复后继续；时间到自动结算，也可提前结束。中止不评定胜负。
+
+页面地址：`/live/host/{房间ID}`、`/live/play/{房间ID}`、`/live/screen/{房间ID}`。
+旧 `/screen/{id}` 和 `/host/{id}` 仍是纯本地彩排，并不会自动变成联机局。
+
+## 微信开发者工具
+
+导入 `apps/miniprogram`，使用测试 AppID/游客模式（当前 project.config.json 是 touristappid）。
+默认后端 `http://127.0.0.1:8001`，仅适用于同机开发者工具。在开发环境关闭合法域名校验；不要将此设置用于正式发布。
+填写主持人页面的房间 ID。也可用编译参数 `room=房间ID` 打开 `pages/play/play`。
+工程未在微信开发者工具及真机验收，不能宣称小程序已上线或微信登录可用。
+
+## 手机局域网测试（手动开启，不自动修改防火墙）
+
+手机和电脑在同一可信 Wi-Fi。将下面 `192.168.1.10` 换成电脑局域网 IP。
+
+```powershell
+# 后端：仅可信局域网使用。创建房间和游客加入没有账号认证。
+$env:EVENTPLAY_ORIGINS='http://127.0.0.1:4180,http://localhost:4180,http://192.168.1.10:4180'
+python -m uvicorn main:app --host 0.0.0.0 --port 8001 --workers 1
+# 前端（另一个终端）
+npm run dev -- --hostname 0.0.0.0 --port 4180
+```
+
+手机使用 `http://192.168.1.10:4180/live/play/{房间ID}`，不能使用 127.0.0.1。
+浏览器默认连接当前主机的 8001 端口；可用 `NEXT_PUBLIC_REALTIME_URL` 覆盖。小程序在 `app.js` 修改 apiBase。
+需要系统防火墙允许可信局域网访问 4180/8001。不要将端口暴露到公网。
+
+## 状态与安全边界
+
+- 房间创建返回独立随机主持凭证，保存在创建浏览器；玩家凭证无权开局或暂停。丢失本机存储则无法恢复主持权限（尚无账号找回）。
+- 玩家令牌按房间隔离；公开快照不含令牌或哈希，仅含测试昵称、队伍和贡献。持有房间链接即可观看，请勿填写个人隐私。
+- 点击请求为 HTTP，每条含递增序号；重复序号不重复计分，每玩家令牌最多约 10 次/秒，允许初始短突发。WebSocket 每 200ms 推送权威状态。
+- 无客户端自报分数；未开局/暂停/结束点击不计分。断线不缓存补发，恢复后读取权威快照。
+- SQLite 保存房间和成绩。服务进程重启后进行中的比赛暂停，若截止时间已过则结算。暂停前最多不足 1 秒的取整偏差，适用于 MVP。
+- 同一玩家身份不支持多标签并行输入。游客可建立多个身份，基础限速不能替代防刷/实名身份。
+- 仅支持单 worker；没有分布式锁、Redis 广播、压测承诺、在线心跳人数或正式奖品逻辑。显示的是“已入场人数”，不是实时在线人数。
+- 自动记录最近 50 条主持命令。正式结果目前查看联机主持台/玩家端，未并入管理端报告列表。
+
+## 验证与下一步
+
+后端测试：`python -m unittest -v test_main.py`。覆盖控制权限、令牌脱敏、WebSocket、队伍校验、重复序号、限速、暂停/恢复、禁止迟到加入、到时结算与 SQLite 重载。
+前端：`npm run typecheck`、`npm run build -- --webpack`，旧彩排测试 `npm test`。
+
+上线前必须接入管理账号与房间权限、微信 code2Session、HTTPS/WSS 合法域名、入场凭证、反刷、隐私说明、监控、负载测试、正式报告和部署配置。
+WebSocket 实现参考 [FastAPI 官方说明](https://fastapi.tiangolo.com/advanced/websockets/)。

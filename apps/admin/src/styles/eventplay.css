@@ -1,0 +1,121 @@
+.ep-stage {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  padding: 24px;
+  color: #fff6de;
+  background: #20140f;
+  min-height: 330px;
+}
+.ep-stage-gold {
+  background:
+    radial-gradient(ellipse at 75% 0%, #92521b80, transparent 65%),
+    linear-gradient(140deg, #2d1810, #171310);
+}
+.ep-stage-space {
+  color: #e2e9ff;
+  background:
+    radial-gradient(ellipse at 75% 0%, #775bc580, transparent 65%),
+    linear-gradient(140deg, #1b1c42, #0f1224);
+}
+.ep-stage-garden {
+  color: #f0ffde;
+  background:
+    radial-gradient(ellipse at 75% 0%, #8eab4080, transparent 65%),
+    linear-gradient(140deg, #24482b, #142c21);
+}
+.ep-stage-stars {
+  position: absolute;
+  inset: 0;
+  opacity: 0.18;
+  background-image: radial-gradient(currentColor 1px, transparent 1px);
+  background-size: 27px 27px;
+}
+.ep-stage-compact {
+  min-height: 250px;
+  padding: 18px;
+}
+.ep-stage-compact .ep-lane {
+  height: 30px;
+}
+.ep-stage-compact .ep-runner svg {
+  height: 25px;
+}
+.ep-stage-compact .ep-stage-stars {
+  opacity: 0.1;
+}
+.ep-lane {
+  height: 48px;
+  position: relative;
+  border-bottom: 1px solid #ffffff26;
+  background: linear-gradient(90deg, #ffffff0d, transparent);
+  border-radius: 4px;
+}
+.ep-lane-label {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  max-width: 23%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ep-lane-dashes {
+  position: absolute;
+  left: 27%;
+  right: 0;
+  bottom: 2px;
+  border-bottom: 1px dashed #ffffff26;
+}
+.ep-runner {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -55%);
+  color: #ffdb91;
+  transition: left 1s linear;
+}
+.ep-stage-space .ep-runner {
+  color: #b7c5ff;
+}
+.ep-stage-garden .ep-runner {
+  color: #d2f89d;
+}
+.ep-runner-glow {
+  position: absolute;
+  width: 70px;
+  height: 7px;
+  bottom: 0;
+  right: 10px;
+  background: linear-gradient(90deg, transparent, currentColor);
+  opacity: 0.5;
+  filter: blur(3px);
+}
+.ep-finish {
+  position: absolute;
+  right: 7%;
+  height: 100%;
+  width: 8px;
+  opacity: 0.35;
+  background: repeating-conic-gradient(white 0% 25%, transparent 0% 50%) 0/8px 8px;
+}
+.ep-preview-hero {
+  background:
+    radial-gradient(
+      ellipse at top right,
+      color-mix(in oklch, var(--primary) 8%, transparent),
+      transparent 60%
+    ),
+    var(--card);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ep-runner {
+    transition: none;
+  }
+}
+@media (max-width: 640px) {
+  .ep-stage {
+    padding: 16px;
+  }
+}
