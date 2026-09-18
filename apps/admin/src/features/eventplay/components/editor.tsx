@@ -23,6 +23,7 @@ import {
   validateConfig
 } from '../api/service';
 import type { Activity, GameConfig } from '../api/types';
+import { clickGames } from '../api/click-games';
 import { Stage } from './stage';
 
 export function NewActivity() {
@@ -36,11 +37,16 @@ export function NewActivity() {
         description: search.get('prompt') ?? template.description,
         mechanic: template.mechanic,
         inputMode: template.inputMode ?? 'tap',
+        swipeDirection: template.swipeDirection ?? 'up',
+        controlVariant: template.controlVariant,
+        reactionVariant: template.reactionVariant,
+        clickVariant: template.clickVariant,
+        raceVariant: template.raceVariant ?? 'horse',
         theme: template.theme,
         teams: template.teams,
         duration: template.duration,
         participants: 200,
-        goal: 1000,
+        goal: template.goal ?? 1000,
         brand: brand.name,
         logo: brand.logo
       }}
@@ -60,7 +66,7 @@ function Editor({ initial, activity }: { initial: GameConfig; activity?: Activit
   const [previous, setPrevious] = useState<GameConfig | null>(null);
   const [savedAt, setSavedAt] = useState('');
   const form = useAppForm({
-    defaultValues: { ...initial, goal: initial.goal ?? 1000, quizText: initial.quizText ?? DEFAULT_QUIZ, winnerCount: initial.winnerCount ?? 1, prizeName: initial.prizeName ?? '幸运奖', catchDifficulty: initial.catchDifficulty ?? 'normal' } as GameConfig,
+    defaultValues: { ...initial, voteChange:initial.voteChange??false,voteLive:initial.voteLive??true, drawRepeat: initial.drawRepeat??false, goal: initial.goal ?? 1000, quizText: initial.quizText ?? DEFAULT_QUIZ, winnerCount: initial.winnerCount ?? 1, prizeName: initial.prizeName ?? '幸运奖', catchDifficulty: initial.catchDifficulty ?? 'normal' } as GameConfig,
     onSubmit: async ({ value }) => {
       setNotice('');
       try {
@@ -179,7 +185,8 @@ function Editor({ initial, activity }: { initial: GameConfig; activity?: Activit
                   <field.TextareaField label='活动需求' placeholder='描述你的场景与目标' />
                 )}
               </form.AppField>
-              <form.AppField name='mechanic'>
+              {initial.clickVariant && <p className='rounded-xl bg-muted p-3 text-sm'>点击模板：{clickGames[initial.clickVariant].name}。更换游戏请返回体验库选择；可调整品牌、目标、时长和队伍。</p>}
+              {!initial.socialVariant && !initial.createVariant && !initial.voteVariant && !initial.wallVariant && !initial.drawVariant && !initial.quizVariant && !initial.clickVariant && !initial.reactionVariant && !initial.controlVariant && <form.AppField name='mechanic'>
                 {(field) => (
                   <field.SelectField
                     label='互动玩法'
@@ -197,10 +204,16 @@ function Editor({ initial, activity }: { initial: GameConfig; activity?: Activit
                   />
                 )}
               </form.AppField>
-              <form.AppField name='goal'>{(field) => <field.TextField label='共同点亮目标（仅点亮玩法生效）' type='number' min={10} max={100000} />}</form.AppField>
+              }
+              <form.AppField name='goal'>{(field) => <field.TextField label='点击目标 / 视觉满格积分（合作达标结束，竞赛按时间结算）' type='number' min={10} max={100000} />}</form.AppField>
               <form.Subscribe selector={(s) => s.values.mechanic}>{(mechanic) => <>
-                {mechanic === 'race' && <form.AppField name='inputMode'>{(field) => <field.SelectField label='赛马操作方式' options={[{label:'点击加速',value:'tap'},{label:'摇一摇（保留点击备用）',value:'shake'}]} />}</form.AppField>}
-                {mechanic === 'quiz' && <form.AppField name='quizText'>{(field) => <field.TextareaField label='单选题库' description='每行一题：题目|选项A|选项B|选项C|选项D|正确字母。支持1～20题，总时长均分，每题至少5秒。选项内不能使用竖线。' rows={6} />}</form.AppField>}
+                {mechanic === 'race' && !initial.clickVariant && <form.AppField name='raceVariant'>{(field) => <field.SelectField label='竞速场景' options={[{value:'horse',label:'欢乐赛马'},{value:'yacht',label:'碧海游艇'},{value:'car',label:'城市赛车'},{value:'motorbike',label:'公路摩托'},{value:'spaceship',label:'星际飞船'},{value:'rocket',label:'火箭升空'},{value:'penguin',label:'企鹅滑雪'},{value:'balloon',label:'热气球'},{value:'dragonboat',label:'龙舟竞渡'},{value:'bicycle',label:'自行车冲刺'},{value:'climb',label:'步步高升'}]} />}</form.AppField>}
+                {mechanic === 'race' && !initial.clickVariant && <form.AppField name='inputMode'>{(field) => <field.SelectField label='竞速操作方式' options={[{label:'点击加速',value:'tap'},{label:'摇一摇（保留点击备用）',value:'shake'},{label:'滑屏（保留无障碍按钮）',value:'swipe'}]} />}</form.AppField>}
+                {mechanic === 'race' && !initial.clickVariant && <form.Subscribe selector={(s) => s.values.inputMode}>{(mode) => mode === 'swipe' && <form.AppField name='swipeDirection'>{(field) => <field.SelectField label='滑屏方向' options={[{value:'up',label:'向上滑动'},{value:'down',label:'向下滑动'},{value:'alternating',label:'左右交替滑动'}]} />}</form.AppField>}</form.Subscribe>}
+                {mechanic === 'quiz' && <form.AppField name='quizText'>{(field) => <field.TextareaField label='知识问答题库' description='每行：题目|A|B|C|D|正确字母，可追加 |题图路径|线索1~线索2~线索3。判断题A/B填写对/错，C/D填不使用；看图题必须填写 /games/ 本地图片路径；线索题须填写3条线索。1～20题，每题至少5秒。发布前请核对答案。' rows={6} />}</form.AppField>}
+                {mechanic==='create'&&initial.createVariant==='puzzle'&&<form.AppField name='createImage'>{field=><field.TextField label='拼图原图路径' description='使用已有 /games/ 本地图片，自动切为16块；可换成品牌海报素材。'/ >}</form.AppField>}
+                {mechanic==='vote'&&<><form.AppField name='voteOptions'>{field=><field.TextareaField label='投票 / 评分选项' description='每行一项，2～8项；观点站2项、淘汰赛2/4/8项。' rows={5}/>}</form.AppField><form.AppField name='voteImages'>{field=><field.TextareaField label='产品图片路径（可选）' description='按选项顺序每行一张，使用已有 /games/ 本地图片。'/ >}</form.AppField><form.AppField name='voteLive'>{field=><field.CheckboxField label='实时公开统计' description='关闭后由主持人截止并揭晓。'/ >}</form.AppField><form.AppField name='voteChange'>{field=><field.CheckboxField label='允许截止前修改提交'/ >}</form.AppField>{initial.voteVariant==='story'&&<form.AppField name='voteStory'>{field=><field.TextareaField label='剧情分支 JSON' description='start为起点，每个节点title与choices；每项含label及next，结局choices为空。最多16节点，不可循环。' rows={12}/>}</form.AppField>}</>}
+                {mechanic === 'draw' && <form.AppField name='drawRepeat'>{(field)=><field.CheckboxField label='允许本系列跨轮重复中奖' description='关闭时，相同规则再来一局会排除本系列已中奖身份；不同独立活动不共享排除名单。游客身份不是实名防刷。'/ >}</form.AppField>}
                 {mechanic === 'draw' && <form.AppField name='winnerCount'>{(field) => <field.TextField label='中奖名额' type='number' min={1} max={100} description='从开场时已入场的玩家中一次性抽取，不重复中奖；无奖品发放。' />}</form.AppField>}
                 {mechanic === 'draw' && <form.AppField name='prizeName'>{(field) => <field.TextField label='奖项名称' maxLength={60} required description='写入最终抽奖记录；系统不负责实际发奖。' />}</form.AppField>}
                 {mechanic === 'catch' && <form.AppField name='catchDifficulty'>{(field) => <field.SelectField label='接金币难度' options={[{label:'简单 · 每3秒一枚',value:'easy'},{label:'标准 · 每2秒一枚',value:'normal'},{label:'挑战 · 每1秒一枚',value:'hard'}]} />}</form.AppField>}

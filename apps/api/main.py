@@ -13,15 +13,41 @@ from typing import Literal
 
 from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel, Field, model_validator
 import game_rules
+import coordination
+import control_rules
+import draw_interactions
+import wall_rules
+import vote_rules
+import create_rules
+import social_rules
 
 
 class Config(BaseModel):
+    socialVariant: Literal['team','interest','match','same','bingo','truth','cards','story','praise'] | None = None
+    createVariant: Literal['puzzle','tree','map','draw','stars','city','flowers','scroll','fireworks'] | None = None
+    createImage: str = Field(default='/games/click/garden-bg-v1.png',max_length=300)
+    voteVariant: Literal['poll','score','support','product','stance','proposal','satisfaction','story','bracket'] | None = None
+    voteOptions: str = Field(default='方案A\n方案B\n方案C\n方案D',max_length=600)
+    voteImages: str = Field(default='',max_length=1600)
+    voteStory: str = Field(default=vote_rules.DEFAULT_STORY,max_length=10000)
+    voteLive: bool = True
+    voteChange: bool = False
+    wallVariant: Literal['avatars','logo','wishes','photos','barrage','garden','cities','welcome','stars'] | None = None
+    drawVariant: Literal['list', 'wheel', 'egg', 'box', 'capsule', 'balloon', 'treasure', 'train'] | None = None
+    drawRepeat: bool = False
+    quizVariant: Literal['adventure', 'boolean', 'buzzer', 'race', 'picture', 'clues', 'tower', 'boss'] | None = None
+    controlVariant: Literal['coins', 'runner', 'space', 'ski', 'boat', 'parking', 'maze', 'balance'] | None = None
+    reactionVariant: Literal['mole', 'rhythm', 'stack', 'basket', 'fruit', 'chef', 'fish', 'memory'] | None = None
     name: str = Field(min_length=1, max_length=60)
     description: str = Field(default='', max_length=2000)
-    mechanic: Literal['race', 'tug', 'money', 'alternating', 'light', 'quiz', 'draw', 'catch', 'reaction']
-    inputMode: Literal['tap', 'shake'] = 'tap'
+    mechanic: Literal['race', 'tug', 'money', 'alternating', 'light', 'quiz', 'draw', 'catch', 'reaction', 'wall', 'vote', 'create', 'social']
+    clickVariant: Literal['tug', 'boss', 'balloon', 'rocket', 'flower', 'tower', 'brand', 'popcorn'] | None = None
+    inputMode: Literal['tap', 'shake', 'swipe'] = 'tap'
+    swipeDirection: Literal['up', 'down', 'alternating'] = 'up'
+    raceVariant: Literal['horse', 'yacht', 'car', 'motorbike', 'spaceship', 'rocket', 'penguin', 'balloon', 'dragonboat', 'bicycle', 'climb'] = 'horse'
     quizText: str = Field(default=game_rules.DEFAULT_QUIZ, max_length=14000)
     winnerCount: int = Field(default=1, ge=1, le=100)
     prizeName: str = Field(default='幸运奖', min_length=1, max_length=60)
@@ -36,6 +62,39 @@ class Config(BaseModel):
 
     @model_validator(mode='after')
     def validate_teams(self):
+        if self.socialVariant and self.mechanic!='social':raise ValueError('破冰场景与玩法不匹配')
+        if self.createVariant and self.mechanic!='create':raise ValueError('共创场景与玩法不匹配')
+        if self.mechanic=='create' and (not self.createImage.startswith('/games/') or '..' in self.createImage or any(c in self.createImage for c in '?#')):raise ValueError('共创图片须为 /games/ 本地路径')
+        if self.voteVariant and self.mechanic!='vote':raise ValueError('投票场景与玩法不匹配')
+        if self.mechanic=='vote':
+            opts=vote_rules.options(self.voteOptions)
+            if self.voteVariant=='stance' and len(opts)!=2:raise ValueError('观点站需要两个选项')
+            if self.voteVariant=='satisfaction' and len(opts)!=5:raise ValueError('满意度需要五个等级选项')
+            if self.voteVariant=='bracket' and len(opts) not in (2,4,8):raise ValueError('淘汰赛需要2、4或8个选项')
+            if self.voteVariant=='story':vote_rules.story(self.voteStory)
+            images=self.voteImages.splitlines()
+            if images and (len(images)!=len(opts) or any(not p.startswith('/games/') or '..' in p or '?' in p or '#' in p for p in images)):raise ValueError('每个选项需对应一条 /games/ 本地图片路径')
+        if self.wallVariant and self.mechanic!='wall':raise ValueError('签到场景与玩法不匹配')
+        if self.drawVariant and self.mechanic != 'draw':
+            raise ValueError('抽奖场景与玩法不匹配')
+        if self.quizVariant and self.mechanic != 'quiz':
+            raise ValueError('答题场景与玩法不匹配')
+        if self.mechanic == 'quiz':
+            questions = game_rules.parse_quiz(self.quizText)
+            if self.quizVariant == 'boolean' and any(q['correct'] > 1 or q['options'][:2] != ['对', '错'] for q in questions):
+                raise ValueError('判断题选项A/B必须为对/错，答案仅为A或B')
+            if self.quizVariant == 'picture' and any(not q['image'] for q in questions):
+                raise ValueError('看图题每题需要题图路径')
+            if self.quizVariant == 'clues' and any(len(q['clues']) != 3 for q in questions):
+                raise ValueError('线索题每题需要3条线索')
+        if self.controlVariant and self.mechanic != 'catch':
+            raise ValueError('控制场景与玩法不匹配')
+        if self.reactionVariant and self.mechanic != 'reaction':
+            raise ValueError('手眼协调场景与玩法不匹配')
+        if self.clickVariant:
+            expected = 'tug' if self.clickVariant == 'tug' else 'light' if self.clickVariant in ('boss', 'rocket', 'flower', 'brand') else 'race'
+            if self.mechanic != expected or self.inputMode != 'tap':
+                raise ValueError('点击场景与玩法不匹配')
         if not self.prizeName.strip():
             raise ValueError('奖项名称不能为空')
         if self.mechanic == 'draw' and self.winnerCount > self.participants:
@@ -61,12 +120,27 @@ class Join(BaseModel):
 
 class Tap(BaseModel):
     seq: int = Field(ge=1, le=2147483647, strict=True)
-    kind: Literal['tap', 'shake', 'swipe', 'left', 'right'] = 'tap'
+    kind: Literal['tap', 'shake', 'swipe', 'left', 'right', 'swipe-up', 'swipe-down', 'swipe-left', 'swipe-right'] = 'tap'
 
 
 class Hit(BaseModel):
     index: int = Field(ge=0, le=300, strict=True)
     cell: int = Field(ge=0, le=8, strict=True)
+
+
+class ControlAction(BaseModel):
+    seq: int = Field(ge=1, le=2147483647, strict=True)
+    direction: Literal['left', 'right', 'up', 'down', 'forward', 'back', 'jump', 'brake']
+
+
+class CoordinationAction(BaseModel):
+    token: str = Field(min_length=1, max_length=64)
+    elapsed: int = Field(default=0, ge=0, le=20000)
+    cell: int = Field(default=0, ge=0, le=8)
+    x1: float = Field(default=0, ge=0, le=100, allow_inf_nan=False)
+    y1: float = Field(default=0, ge=0, le=100, allow_inf_nan=False)
+    x2: float = Field(default=0, ge=0, le=100, allow_inf_nan=False)
+    y2: float = Field(default=0, ge=0, le=100, allow_inf_nan=False)
 
 
 class ActivityWrite(BaseModel):
@@ -89,7 +163,11 @@ class AgendaStep(BaseModel):
 
 
 class Command(BaseModel):
-    action: Literal['start', 'countdown', 'cancel_countdown', 'pause', 'resume', 'finish', 'abort', 'blackout', 'restore', 'draw']
+    action: Literal['start', 'countdown', 'cancel_countdown', 'pause', 'resume', 'finish', 'abort', 'blackout', 'restore', 'draw', 'reveal_draw']
+
+class DrawAction(BaseModel):
+    action: Literal['charge','reveal','wish']
+    value: int = Field(default=0, ge=0, le=3, strict=True)
 
 
 class Answer(BaseModel):
@@ -131,7 +209,8 @@ class Engine:
                 self.log(room, '服务重启：取消开场倒计时，请重新检查并开场')
                 self.save(room)
             if room['state'] == 'running':
-                room['remaining'] = max(0, math.ceil(room['deadline'] - time.time()))
+                if room['config']['mechanic']=='create':create_rules.lifecycle(room,'pause')
+                room['remaining'] = room['remaining'] if room['config']['mechanic'] in ('wall','vote','create','social') else max(0, math.ceil(room['deadline'] - time.time()))
                 room['state'] = 'paused' if room['remaining'] else 'completed'
                 game_rules.advance(room, final=room['state'] == 'completed')
                 self.log(room, '服务重启：恢复为暂停或结算状态')
@@ -163,7 +242,7 @@ class Engine:
                     room['deadline'] = room.pop('startsAt') + room['remaining']
                     self.log(room, '倒计时结束，正式开始比赛')
                 self.save(room)
-        if room['state'] == 'running':
+        if room['state'] == 'running' and room['config']['mechanic'] not in ('wall','vote','create','social'):
             remaining = max(0, math.ceil(room['deadline'] - time.time()))
             if remaining != room['remaining']:
                 room['remaining'] = remaining
@@ -183,7 +262,7 @@ class Engine:
         online = sum(key.startswith('player:') for key in active)
         presence = dict(online=online, offline=max(0, len(room['players'])-online), screens=sum(key.startswith('screen:') for key in active))
         return {**{k: room[k] for k in ['id', 'state', 'remaining', 'scores', 'revision', 'blackout', 'log']}, 'trial': bool(room.get('trialExpiresAt')), 'presence': presence, 'countdown': room.get('countdown', 0), 'agendaId': room.get('agendaId'), 'config': config, 'game': game_rules.public_game(room),
-                'players': [{'id': p['id'], 'name': p['name'], 'team': p['team'], 'score': p['score'], 'lane': p.get('lane', 1), 'answered': [int(k) for k in p.get('answers', {})]} for p in room['players'].values()]}
+                'players': [{'id': p['id'], 'name': p['name'], 'team': p['team'], 'score': p['score'], 'control': p.get('control'), 'lane': p.get('lane', 1), 'answered': [int(k) for k in p.get('answers', {})]} for p in room['players'].values()]}
 
     def owner(self, room, token):
         if not token or not secrets.compare_digest(room['owner'], digest(token)):
@@ -203,7 +282,7 @@ class Engine:
 
     def join(self, rid, data):
         room = self.get(rid)
-        if room['state'] != 'waiting' or room.get('startsAt'):
+        if (room['state'] != 'waiting' and not (room['config']['mechanic'] in ('wall','create','social') and room['state']=='running')) or room.get('startsAt'):
             raise HTTPException(409, '已开局，不能新加入；已加入玩家可刷新恢复')
         name = data.name.strip()
         if not name or data.team >= len(room['scores']):
@@ -234,11 +313,17 @@ class Engine:
         if not player:
             raise HTTPException(403, '玩家凭证无效')
         mechanic = room['config']['mechanic']
-        if mechanic in ['quiz', 'draw', 'catch', 'reaction']:
+        if mechanic in ['quiz', 'draw', 'catch', 'reaction', 'wall', 'vote', 'create', 'social']:
             raise HTTPException(422, '本局不支持点击加分')
         allowed = ['left', 'right'] if mechanic == 'alternating' else ['swipe'] if mechanic == 'money' else ['tap']
         if mechanic == 'race' and room['config'].get('inputMode') == 'shake':
             allowed = ['shake', 'tap']  # Explicit accessibility fallback, same scoring budget.
+        swipe = mechanic == 'race' and room['config'].get('inputMode') == 'swipe'
+        direction = room['config'].get('swipeDirection', 'up')
+        if swipe:
+            allowed = ['swipe-left', 'swipe-right'] if direction == 'alternating' else ['swipe-' + direction]
+        alternating = mechanic == 'alternating' or (swipe and direction == 'alternating')
+        side = kind.removeprefix('swipe-')
         if kind not in allowed:
             raise HTTPException(422, '本局输入方式不匹配')
         if seq <= player['seq']:
@@ -247,19 +332,19 @@ class Engine:
         now = time.time()
         player['bucket'] = min(10, player['bucket'] + max(0, now - player['refill']) * 10)
         player['refill'] = now
-        same_side = mechanic == 'alternating' and player.get('lastSide') == kind
+        same_side = alternating and player.get('lastSide') == side
         accepted = room['state'] == 'running' and player['bucket'] >= 1 and not same_side
         if accepted:
             player['bucket'] -= 1
             player['score'] += 1
             room['scores'][player['team']] += 1
-            if mechanic == 'alternating':
-                player['lastSide'] = kind
+            if alternating:
+                player['lastSide'] = side
             if mechanic == 'light' and sum(room['scores']) >= room['config'].get('goal', 1000):
                 room['state'] = 'completed'
-                self.log(room, '全场共同目标达成，点亮完成')
+                self.log(room, '全场共同目标达成')
         self.save(room)
-        return {'accepted': accepted, 'reason': '' if accepted else '请左右交替点击' if same_side else '未开局、已暂停/结束，或操作过快', 'seq': seq, 'nextSide': 'right' if player.get('lastSide') == 'left' else 'left'}
+        return {'accepted': accepted, 'reason': '' if accepted else ('请左右交替滑动' if swipe else '请左右交替点击') if same_side else '未开局、已暂停/结束，或操作过快', 'seq': seq, 'nextSide': 'right' if player.get('lastSide') == 'left' else 'left'}
 
     def rematch(self, rid, token):
         previous = self.get(rid)
@@ -294,6 +379,13 @@ class Engine:
     def command(self, rid, token, action):
         room = self.get(rid)
         self.owner(room, token)
+        if action == 'reveal_draw':
+            if not room.get('drawResult'):
+                raise HTTPException(409,'请先开奖')
+            room['drawRevealed']=[p['id'] for p in room['drawResult']['winners']]
+            self.log(room,'主持人代揭晓已锁定结果')
+            self.save(room)
+            return self.public(room)
         if action == 'cancel_countdown':
             if not room.get('startsAt'):
                 raise HTTPException(409, '当前没有待取消的倒计时')
@@ -311,7 +403,7 @@ class Engine:
             if not room.get('drawResult'):
                 series = room.get('series', room['id'])
                 excluded = {identity for old in self.rooms.values() if old.get('series', old['id']) == series for identity in old.get('winnerIdentities', [])}
-                game_rules.draw(room, excluded)
+                game_rules.draw(room, set() if room['config'].get('drawRepeat') else excluded)
                 self.log(room, '抽奖完成，名单已锁定，不可重复抽取')
                 self.save(room)
             return self.public(room)
@@ -327,6 +419,7 @@ class Engine:
                 raise HTTPException(409, '入场人数不足中奖名额')
             if action == 'finish':
                 game_rules.advance(room, final=True)
+            if room['config']['mechanic']=='create':create_rules.lifecycle(room,action)
             room['state'] = {'start': 'running', 'pause': 'paused', 'resume': 'running', 'finish': 'completed', 'abort': 'aborted'}[action]
             if action in ['start', 'resume']:
                 room['deadline'] = time.time() + room['remaining']
@@ -630,6 +723,129 @@ def create_app(path=None):
             raise HTTPException(403, '玩家凭证无效')
         return room, player
 
+    @app.post('/rooms/{rid}/social-action')
+    async def social_action(rid: str, data: social_rules.SocialInput, authorization: str = Header(default='')):
+        async with lock:
+            room,player=active_player(rid,authorization)
+            result=social_rules.act(room,player,data);engine.save(room)
+            return result
+
+    @app.get('/rooms/{rid}/social-self')
+    async def social_self(rid: str, authorization: str = Header(default='')):
+        async with lock:
+            room,player=active_player(rid,authorization)
+            return social_rules.own(room,player)
+
+    @app.get('/rooms/{rid}/social-admin')
+    async def social_admin(rid: str, authorization: str = Header(default='')):
+        async with lock:
+            room=engine.get(rid);engine.owner(room,bearer(authorization))
+            return social_rules.admin(room)
+
+    @app.post('/rooms/{rid}/social-admin')
+    async def social_command(rid: str, data: social_rules.SocialCommand, authorization: str = Header(default='')):
+        async with lock:
+            room=engine.get(rid);engine.owner(room,bearer(authorization))
+            social_rules.command(room,data);engine.log(room,'破冰操作：'+data.action);engine.save(room)
+            return social_rules.public(room)
+
+    @app.post('/rooms/{rid}/create-action')
+    async def creation_action(rid: str, data: create_rules.CreateInput, authorization: str = Header(default='')):
+        async with lock:
+            room,player=active_player(rid,authorization)
+            result=create_rules.act(room,player,data);engine.save(room)
+            return result
+
+    @app.get('/rooms/{rid}/create-self')
+    async def creation_self(rid: str, authorization: str = Header(default='')):
+        async with lock:
+            room,player=active_player(rid,authorization)
+            return create_rules.own(room,player)
+
+    @app.get('/rooms/{rid}/create-admin')
+    async def creation_admin(rid: str, authorization: str = Header(default='')):
+        async with lock:
+            room=engine.get(rid);engine.owner(room,bearer(authorization))
+            return create_rules.checked(room)
+
+    @app.post('/rooms/{rid}/create-admin')
+    async def creation_command(rid: str, data: create_rules.CreateCommand, authorization: str = Header(default='')):
+        async with lock:
+            room=engine.get(rid);engine.owner(room,bearer(authorization))
+            create_rules.command(room,data);engine.log(room,'共创操作：'+data.action);engine.save(room)
+            return create_rules.public(room)
+
+    @app.post('/rooms/{rid}/ballot')
+    async def ballot(rid: str, data: vote_rules.Ballot, authorization: str = Header(default='')):
+        async with lock:
+            room,player=active_player(rid,authorization)
+            result=vote_rules.submit(room,player,data);engine.save(room)
+            return result
+
+    @app.get('/rooms/{rid}/vote-self')
+    async def vote_self(rid: str, authorization: str = Header(default='')):
+        async with lock:
+            room,player=active_player(rid,authorization)
+            if room['config']['mechanic']!='vote':raise HTTPException(409,'本场不是投票')
+            s=vote_rules.state(room)
+            return dict(round=s['round'],ballot=s['ballots'].get(player['id'],{}))
+
+    @app.post('/rooms/{rid}/vote-command')
+    async def vote_command(rid: str, data: vote_rules.VoteCommand, authorization: str = Header(default='')):
+        async with lock:
+            room=engine.get(rid);engine.owner(room,bearer(authorization))
+            vote_rules.command(room,data);engine.log(room,'投票操作：'+data.action);engine.save(room)
+            return vote_rules.public(room)
+
+    @app.get('/rooms/{rid}/wall-photo/{post_id}')
+    async def wall_photo(rid: str, post_id: str):
+        async with lock:
+            room=engine.get(rid)
+            wall=wall_rules.state(room)
+            post=next((p for p in wall['posts'] if p['id']==post_id and p['status']=='approved' and p['photo']),None)
+            if not post or wall['hidden']:raise HTTPException(404,'照片未公开')
+            return Response(wall_rules.base64.b64decode(post['photo'].split(',',1)[1]),media_type='image/jpeg',headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})
+
+    @app.post('/rooms/{rid}/wall-action')
+    async def wall_action(rid: str, data: wall_rules.WallInput, authorization: str = Header(default='')):
+        async with lock:
+            room,player=active_player(rid,authorization)
+            result=wall_rules.act(room,player,data)
+            engine.save(room)
+            return result
+
+    @app.get('/rooms/{rid}/wall-admin')
+    async def wall_admin(rid: str, authorization: str = Header(default='')):
+        async with lock:
+            room=engine.get(rid);engine.owner(room,bearer(authorization))
+            if room['config']['mechanic']!='wall':raise HTTPException(409,'本场不是签到上墙')
+            return wall_rules.state(room)
+
+    @app.post('/rooms/{rid}/wall-admin')
+    async def wall_command(rid: str, data: wall_rules.WallCommand, authorization: str = Header(default='')):
+        async with lock:
+            room=engine.get(rid);engine.owner(room,bearer(authorization))
+            wall_rules.command(room,data)
+            engine.log(room,'上墙管理：'+data.action)
+            engine.save(room)
+            return wall_rules.state(room)
+
+    @app.post('/rooms/{rid}/draw-action')
+    async def draw_action(rid: str, data: DrawAction, authorization: str = Header(default='')):
+        async with lock:
+            room, player = active_player(rid, authorization)
+            result=draw_interactions.act(room,player,data.action,data.value)
+            if result['accepted']:engine.save(room)
+            return result
+
+    @app.post('/rooms/{rid}/buzz')
+    async def buzz(rid: str, data: Answer, authorization: str = Header(default='')):
+        async with lock:
+            room, player = active_player(rid, authorization)
+            result = game_rules.buzz(room, player, data.index)
+            engine.save(room)
+            return result
+
     @app.post('/rooms/{rid}/answer')
     async def answer(rid: str, data: Answer, authorization: str = Header(default='')):
         async with lock:
@@ -652,6 +868,31 @@ def create_app(path=None):
         async with lock:
             room, player = active_player(rid, authorization)
             result = game_rules.hit(room, player, data.index, data.cell)
+            engine.save(room)
+            return result
+
+    @app.post('/rooms/{rid}/control')
+    async def control_action(rid: str, data: ControlAction, authorization: str = Header(default='')):
+        async with lock:
+            room, player = active_player(rid, authorization)
+            result = control_rules.act(room, player, data.seq, data.direction)
+            if result['accepted']:
+                engine.save(room)
+            return result
+
+    @app.post('/rooms/{rid}/challenge')
+    async def coordination_challenge(rid: str, authorization: str = Header(default='')):
+        async with lock:
+            room, player = active_player(rid, authorization)
+            result = coordination.challenge(room, player)
+            engine.save(room)
+            return result
+
+    @app.post('/rooms/{rid}/skill')
+    async def coordination_action(rid: str, data: CoordinationAction, authorization: str = Header(default='')):
+        async with lock:
+            room, player = active_player(rid, authorization)
+            result = coordination.act(room, player, data)
             engine.save(room)
             return result
 

@@ -1,9 +1,19 @@
 'use client';
 import Image from 'next/image';
+import { QuizScene } from './quiz-scene';
+import { DrawScene } from './draw-scene';
+import { WallScene } from './wall-scene';
+import { SocialScene } from './social-scene';
+import { CreateScene } from './create-scene';
+import { VoteScene } from './vote-scene';
 import { cn } from '@/lib/utils';
 import type { GameConfig } from '../api/types';
 import type { LiveRoom } from '../api/realtime';
 import { RaceArena } from './race-scene';
+import { ClickArena } from './click-scene';
+import { ControlPanel } from './control-panel';
+import { ReactionPanel } from './reaction-panel';
+import { MoneyArena } from './money-scene';
 export function Stage({
   config,
   scores = [78, 65, 52],
@@ -27,7 +37,17 @@ export function Stage({
   playerUrl?: string;
   connected?: boolean;
 }) {
-  if (config.mechanic === 'race') return <RaceArena config={config} scores={scores} remaining={remaining} compact={compact} live={live} phase={phase} countdown={countdown} playerCount={playerCount} playerUrl={playerUrl} connected={connected} />;
+  if(config.mechanic==='social')return <SocialScene room={{id:'preview',config,scores,remaining:config.duration,state:'waiting',revision:0,blackout:false,log:[],players:[]}}/>;
+  if(config.mechanic==='create')return <CreateScene room={{id:'preview',config,scores,remaining:config.duration,state:'waiting',revision:0,blackout:false,log:[],players:[]}}/>;
+  if(config.mechanic==='vote')return <VoteScene room={{id:'preview',config,scores,remaining:config.duration,state:'waiting',revision:0,blackout:false,log:[],players:[]}}/>;
+  if (config.mechanic==='wall') return <WallScene room={{id:'preview',config,scores,remaining:config.duration,state:'waiting',revision:0,blackout:false,log:[],players:[]}}/>;
+  if (config.mechanic === 'draw') return <DrawScene compact={compact} room={{id:'preview',config,scores,remaining:remaining??config.duration,state:'waiting',revision:0,blackout:false,log:[],players:[]}}/>;
+  if (config.mechanic === 'quiz') return <QuizScene compact={compact} room={{id:'preview',config,scores,remaining:remaining??config.duration,state:'waiting',revision:0,blackout:false,log:[],players:[]}}/>;
+  if (['catch'].includes(config.mechanic)) return <ControlPanel connected={connected??true} room={{id:live?'stage':'preview',config,scores,remaining:remaining??config.duration,state:phase,countdown,revision:0,blackout:false,log:[],players:[],game:{type:'catch',lane:1,index:0,progress:.4}}}/>;
+  if (['reaction'].includes(config.mechanic)) return <ReactionPanel connected={connected??true} room={{id:live?'stage':'preview', config, scores, remaining:remaining??config.duration, state:phase, countdown, revision:0,blackout:false,log:[],players:[],game:{type:'reaction',cell:4,index:0}}}/>;
+  if (config.clickVariant) return <ClickArena config={config} scores={scores} remaining={remaining} compact={compact} live={live} phase={phase} countdown={countdown} playerCount={playerCount} playerUrl={playerUrl} connected={connected} />;
+  if (['race', 'alternating'].includes(config.mechanic)) return <RaceArena config={config} scores={scores} remaining={remaining} compact={compact} live={live} phase={phase} countdown={countdown} playerCount={playerCount} playerUrl={playerUrl} connected={connected} />;
+  if (config.mechanic === 'money') return <MoneyArena config={config} scores={scores} remaining={remaining} compact={compact} live={live} phase={phase} countdown={countdown} playerCount={playerCount} playerUrl={playerUrl} connected={connected} />;
   const teams = config.teams
     .split(/[,，]/)
     .map((s) => s.trim())
@@ -78,14 +98,13 @@ export function Stage({
             ? '凝聚每一份力量，一起推动胜利'
             : config.mechanic === 'light' ? '每个人的贡献，汇聚成同一束光'
             : config.mechanic === 'alternating' ? '左一下，右一下，齐心加速'
-            : config.mechanic === 'money' ? '向上划动品牌卡片，积累团队财富积分'
             : '每一次点击，都让我们更进一步'}
         </p>
       </div>
       {['quiz', 'draw', 'catch', 'reaction'].includes(config.mechanic) ? (
         <div className='relative rounded-xl border border-white/25 bg-white/10 p-8 text-center'>
-          <p className='text-3xl font-semibold'>{config.mechanic === 'reaction' ? '萌鼠出没 · 看准再出手' : config.mechanic === 'quiz' ? 'A · B · C · D' : config.mechanic === 'draw' ? '幸运时刻' : '←  接金币  →'}</p>
-          <p className='mt-4 text-sm'>{config.mechanic === 'reaction' ? '九宫格 · 每轮一次机会 · 命中 +1 分' : config.mechanic === 'quiz' ? '限时单选题 · 答对 +10 分' : config.mechanic === 'draw' ? `从入场名单抽取 ${config.winnerCount ?? 1} 人` : '三条轨道 · 左右移动 · 接到 +1 分'}</p>
+          <p className='text-3xl font-semibold'>{config.mechanic === 'reaction' ? '萌鼠出没 · 看准再出手' : '←  接金币  →'}</p>
+          <p className='mt-4 text-sm'>{config.mechanic === 'reaction' ? '九宫格 · 每轮一次机会 · 命中 +1 分' : '三条轨道 · 左右移动 · 接到 +1 分'}</p>
           <p className='mt-3 text-xs opacity-70'>发布后进入联机主持端开始</p>
         </div>
       ) : config.mechanic === 'light' ? (
@@ -96,14 +115,6 @@ export function Stage({
           <strong className='text-3xl'>{progress >= 100 ? '全场点亮成功！' : `${Math.floor(progress)}%`}</strong>
           <div role='progressbar' aria-label='共同点亮进度' aria-valuenow={Math.floor(progress)} aria-valuemin={0} aria-valuemax={100} className='h-3 w-3/4 overflow-hidden rounded-full bg-white/15'><div className='h-full bg-amber-200 transition-all' style={{ width: `${progress}%` }} /></div>
           <span className='text-sm'>{total} / {goal} 份能量 · 全场合作，不评队伍输赢</span>
-        </div>
-      ) : config.mechanic === 'money' ? (
-        <div className='relative grid grid-cols-2 gap-4'>
-          {teams.map((team, i) => <div key={team} className='rounded-xl border border-amber-200/40 bg-amber-100/10 p-5 text-center'>
-            <p className='text-sm'>{team}</p><p className='my-4 font-mono text-4xl font-bold text-amber-200'>{scores[i] ?? 0}</p>
-            <div className='h-2 overflow-hidden rounded bg-white/15'><div className='h-full bg-amber-200 transition-all' style={{ width: `${Math.min(100, ((scores[i] ?? 0) / max) * 100)}%` }} /></div>
-            <p className='mt-3 text-xs opacity-70'>财富积分 · 非现金</p>
-          </div>)}
         </div>
       ) : config.mechanic === 'alternating' ? (
         <div className='relative space-y-3'>
@@ -140,7 +151,7 @@ export function Stage({
         </div>
       )}
       <div className='relative mt-6 flex items-center justify-between border-t border-white/15 pt-3 text-xs opacity-70'>
-        <span>{config.mechanic === 'light' ? '全场共同贡献，点亮属于我们的品牌' : config.mechanic === 'alternating' ? '左右交替，齐心冲刺' : config.mechanic === 'money' ? '向上滑动，一划一分' : '点击手机，为你的战队加速'}</span>
+        <span>{config.mechanic === 'light' ? '全场共同贡献，点亮属于我们的品牌' : config.mechanic === 'alternating' ? '左右交替，齐心冲刺' : '点击手机，为你的战队加速'}</span>
         <span>{live ? '联机测试 · 玩家实时贡献' : '演示画面 · 非真实比赛'}</span>
       </div>
     </div>

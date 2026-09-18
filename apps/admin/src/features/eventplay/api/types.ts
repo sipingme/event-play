@@ -1,5 +1,9 @@
-export type Mechanic = 'race' | 'tug' | 'money' | 'alternating' | 'light' | 'quiz' | 'draw' | 'catch' | 'reaction';
+export type Mechanic = 'race' | 'tug' | 'money' | 'alternating' | 'light' | 'quiz' | 'draw' | 'catch' | 'reaction' | 'wall' | 'vote' | 'create' | 'social';
+export type ClickVariant = 'tug' | 'boss' | 'balloon' | 'rocket' | 'flower' | 'tower' | 'brand' | 'popcorn';
 export type ThemeId = 'gold' | 'space' | 'garden';
+export type RaceVariant = 'horse' | 'yacht' | 'car' | 'motorbike' | 'spaceship' | 'rocket' | 'penguin' | 'balloon' | 'dragonboat' | 'bicycle' | 'climb';
+export type SwipeDirection = 'up' | 'down' | 'alternating';
+export type InputKind = 'tap' | 'shake' | 'swipe' | 'left' | 'right' | 'swipe-up' | 'swipe-down' | 'swipe-left' | 'swipe-right';
 export interface PublicEvent {
   id: string;
   name: string;
@@ -11,7 +15,21 @@ export interface PublicEvent {
   finished: boolean;
 }
 export interface GameConfig {
-  inputMode?: 'tap' | 'shake';
+  socialVariant?:import('./social-games').SocialVariant;
+  createVariant?: import('./create-games').CreateVariant;
+  createImage?:string;
+  voteVariant?: import('./vote-games').VoteVariant;
+  voteOptions?:string;voteImages?:string;voteStory?:string;voteLive?:boolean;voteChange?:boolean;
+  wallVariant?: import('./wall-games').WallVariant;
+  drawVariant?: import('./draw-games').DrawVariant;
+  drawRepeat?: boolean;
+  quizVariant?: import('./quiz-games').QuizVariant;
+  controlVariant?: import('./control-games').ControlVariant;
+  reactionVariant?: import('./coordination').ReactionVariant;
+  clickVariant?: ClickVariant;
+  raceVariant?: RaceVariant;
+  inputMode?: 'tap' | 'shake' | 'swipe';
+  swipeDirection?: SwipeDirection;
   quizText?: string;
   winnerCount?: number;
   prizeName?: string;
@@ -35,7 +53,23 @@ export interface Activity extends GameConfig {
   release?: { version: number; config: GameConfig; createdAt: string };
 }
 export interface Template {
-  inputMode?: 'tap' | 'shake';
+  socialVariant?:import('./social-games').SocialVariant;
+  createVariant?: import('./create-games').CreateVariant;
+  createImage?:string;
+  voteVariant?: import('./vote-games').VoteVariant;
+  voteOptions?:string;voteImages?:string;voteStory?:string;voteLive?:boolean;
+  wallVariant?: import('./wall-games').WallVariant;
+  drawVariant?: import('./draw-games').DrawVariant;
+  quizVariant?: import('./quiz-games').QuizVariant;
+  quizText?: string;
+  controlVariant?: import('./control-games').ControlVariant;
+  reactionVariant?: import('./coordination').ReactionVariant;
+  clickVariant?: ClickVariant;
+  goal?: number;
+  raceVariant?: RaceVariant;
+  showcase?: boolean;
+  inputMode?: 'tap' | 'shake' | 'swipe';
+  swipeDirection?: SwipeDirection;
   featured?: boolean;
   id: string;
   name: string;

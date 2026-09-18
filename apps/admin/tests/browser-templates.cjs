@@ -21,7 +21,7 @@ const api='http://127.0.0.1:8012';
   await page.goto(base+'/dashboard/templates');
   for(const name of ['摇一摇','滑屏','点击','手眼协调','控制']) {
     await page.getByRole('button',{name,exact:true}).click();
-    await expect(page.getByText('看效果 / 试玩',{exact:true})).toHaveCount(1);
+    await expect(page.getByText('看效果 / 试玩',{exact:true})).toHaveCount(name==='摇一摇'?8:name==='滑屏'?4:name==='点击'?9:name==='手眼协调'||name==='控制'?8:1);
   }
   await page.getByRole('button',{name:'全部',exact:true}).click();
   await page.screenshot({path:path.join(os.tmpdir(),'eventplay-template-library.png'),fullPage:true});

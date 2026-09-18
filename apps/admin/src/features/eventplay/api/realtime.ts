@@ -8,8 +8,16 @@ export interface LiveRoom {
   countdown?: number;
   agendaId?: string | null;
   game?: {
-    type: 'quiz' | 'draw' | 'catch' | 'reaction'; cell?: number | null; index?: number; total?: number; seconds?: number;
-    question?: { text: string; options: string[] } | null;
+    social?:import('./social-games').SocialState;
+    creation?:import('./create-games').CreationState;
+    round?:number;title?:string;options?:string[];closed?:boolean;voteRevealed?:boolean;finished?:boolean;voters?:number;results?:import('./vote-games').VoteResult[]|null;history?:{round:number;title:string;results:import('./vote-games').VoteResult[];rating:boolean}[];
+    variant?: import('./wall-games').WallVariant; entries?: {id:string;name:string;avatar:number;city:string}[];
+    posts?: import('./wall-games').WallPost[]; hidden?:boolean; paused?:boolean; stars?:string[]; cityCounts?:Record<string,number>;
+    charge?: number; wishes?: Record<string,string>; revealed?: string[];
+    kind?:string; walls?:number[]; controlVariant?:string;
+    type: 'quiz' | 'draw' | 'catch' | 'reaction' | 'wall' | 'vote' | 'create' | 'social'; cell?: number | null; index?: number; total?: number; seconds?: number;
+    question?: { text: string; options: string[]; image?: string; clues?: string[] } | null;
+    revealStage?: number; points?: number; buzzer?: string | null; goal?: number;
     lane?: number | null; progress?: number; interval?: number;
     reveals?: { index: number; text: string; correct: number; answer: string }[];
     result?: { prizeName?: string; at: number; candidates: string[]; winners: {id: string; name: string}[]; algorithm: string } | null;
@@ -22,7 +30,7 @@ export interface LiveRoom {
   revision: number;
   blackout: boolean;
   log: { at: number; text: string }[];
-  players: { id: string; name: string; team: number; score: number; lane?: number; answered?: number[] }[];
+  players: { id: string; name: string; team: number; score: number; control?:import('./control-games').ControlState; lane?: number; answered?: number[] }[];
 }
 export interface PlayerSession {
   token: string;
@@ -113,7 +121,7 @@ export async function joinLiveRoom(id: string, name: string, team: number) {
   localStorage.setItem(`eventplay.player.${id}`, JSON.stringify(session));
   return session;
 }
-export async function tapLiveRoom(id: string, kind: 'tap' | 'shake' | 'swipe' | 'left' | 'right' = 'tap') {
+export async function tapLiveRoom(id: string, kind: import('./types').InputKind = 'tap') {
   const session = playerSession(id);
   if (!session) throw new Error('请先加入房间');
   session.seq += 1;
@@ -132,10 +140,30 @@ export async function answerLiveRoom(id: string, index: number, choice: number) 
   if (!player) throw new Error('请先加入房间');
   return liveRequest<{accepted: boolean}>(`/rooms/${id}/answer`, { index, choice }, player.token);
 }
+export async function buzzLiveRoom(id: string, index: number) {
+  const player = playerSession(id);
+  if (!player) throw new Error('请先加入房间');
+  return liveRequest<{accepted:boolean}>(`/rooms/${id}/buzz`, {index, choice:0}, player.token);
+}
+export async function drawLiveAction(id:string,action:'charge'|'reveal'|'wish',value=0) {
+  const player=playerSession(id);
+  if(!player)throw new Error('请先加入房间');
+  return liveRequest<{accepted:boolean}>(`/rooms/${id}/draw-action`,{action,value},player.token);
+}
 export async function hitLiveRoom(id: string, index: number, cell: number) {
   const player = playerSession(id);
   if (!player) throw new Error('请先加入房间');
   return liveRequest<{accepted: boolean}>(`/rooms/${id}/hit`, { index, cell }, player.token);
+}
+export interface SkillChallenge { token:string; variant:string; target:number; sequence:number[]; board:number[]; x:number; y:number; lifetime:number }
+export interface SkillResult { accepted:boolean; points:number; done:boolean; step?:number; matched?:number[]; revealed?:Record<string,number> }
+export async function startSkill(id:string) {
+  const session=playerSession(id); if(!session) throw new Error('请先加入房间');
+  return liveRequest<SkillChallenge>(`/rooms/${id}/challenge`,{},session.token);
+}
+export async function submitSkill(id:string, data:{token:string;elapsed?:number;cell?:number;x1?:number;y1?:number;x2?:number;y2?:number}) {
+  const session=playerSession(id); if(!session) throw new Error('请先加入房间');
+  return liveRequest<SkillResult>(`/rooms/${id}/skill`,data,session.token);
 }
 export async function createTrialRoom(config: GameConfig) {
   const result = await liveRequest<{room: LiveRoom; token: string}>('/trials', config);
@@ -148,6 +176,11 @@ export async function moveLiveRoom(id: string, direction: 'left' | 'right') {
   player.seq += 1;
   localStorage.setItem(`eventplay.player.${id}`, JSON.stringify(player));
   return liveRequest<{accepted: boolean; lane: number}>(`/rooms/${id}/move`, { seq: player.seq, direction }, player.token);
+}
+export async function controlLiveRoom(id:string,direction:import('./control-games').ControlDirection) {
+  const player=playerSession(id);if(!player)throw new Error('请先加入房间');
+  player.seq++;localStorage.setItem(`eventplay.player.${id}`,JSON.stringify(player));
+  return liveRequest<{accepted:boolean;lane:number;control:import('./control-games').ControlState}>(`/rooms/${id}/control`,{seq:player.seq,direction},player.token);
 }
 export async function rematchLiveRoom(id: string): Promise<LiveRoom> {
   const token = ownerToken(id);

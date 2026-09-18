@@ -1,0 +1,23 @@
+const {chromium,expect}=require(process.env.PLAYWRIGHT_MODULE||'@playwright/test');
+const path=require('node:path'),os=require('node:os');
+(async()=>{const browser=await chromium.launch({channel:'chrome',headless:true});const ctx=await browser.newContext({viewport:{width:1440,height:1000},reducedMotion:'reduce'});
+await ctx.addInitScript(()=>{const f=window.fetch.bind(window);window.fetch=(u,o)=>f(typeof u==='string'?u.replace(':8001/',':8012/'):u,o);const W=window.WebSocket;window.WebSocket=class extends W{constructor(u,p){super(String(u).replace(':8001/',':8012/'),p);}};});
+const page=await ctx.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+try{for(const variant of ['tug','boss','balloon','rocket','flower','tower','brand','popcorn']){
+ await page.goto('http://127.0.0.1:4191/dashboard/templates/click-'+variant);
+ const stage=page.locator('[data-click-stage]');await expect(stage).toHaveAttribute('data-click-stage',variant);
+ await stage.evaluate(async el=>{const bg=getComputedStyle(el).backgroundImage.match(/url\([\"']?(.*?)[\"']?\)/)?.[1];const urls=[...el.querySelectorAll('image')].map(i=>i.getAttribute('href'));if(bg)urls.push(bg);await Promise.all([...new Set(urls)].filter(Boolean).map(src=>new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>img.decode().then(resolve,reject);img.onerror=reject;img.src=src;})));});
+ await stage.screenshot({path:path.join(os.tmpdir(),'eventplay-click-'+variant+'.png')});
+ await page.setViewportSize({width:390,height:844});await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.setViewportSize({width:1440,height:1000});
+ await page.getByRole('button',{name:'创建扫码试玩',exact:true}).click();
+ const player=page.frameLocator('iframe[title="试玩玩家"]');await player.getByRole('textbox',{name:/测试昵称/}).fill('点击测试');await player.getByRole('button',{name:'加入活动',exact:true}).click();
+ await page.getByRole('button',{name:'开始试玩',exact:true}).click();
+ const rid=(await page.locator('iframe[title="试玩玩家"]').getAttribute('src')).split('/').pop();const state=async()=> (await fetch('http://127.0.0.1:8012/rooms/'+rid)).json();
+ await expect.poll(async()=>(await state()).state,{timeout:8000}).toBe('running');
+ await player.getByRole('button',{name:/^点击/}).click();await expect.poll(async()=>(await state()).scores[0]).toBe(1);
+ expect((await state()).config.clickVariant).toBe(variant);
+ await page.getByRole('button',{name:'暂停试玩',exact:true}).click();await expect.poll(async()=>(await state()).state).toBe('paused');
+ await page.getByRole('button',{name:'结束试玩',exact:true}).click();
+ await page.getByRole('button',{name:'用此模板创建',exact:true}).click();await expect(page.locator('[data-click-stage]')).toHaveAttribute('data-click-stage',variant);
+ console.log('PASS click scene, real player tap, pause, mobile, create:',variant);
+}if(errors.length)throw Error(errors.join('\n'));}finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1});

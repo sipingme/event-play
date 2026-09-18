@@ -8,6 +8,70 @@ CONFIG = dict(name='测试赛马', mechanic='race', theme='gold', duration=30, p
 
 
 class RealtimeTests(unittest.TestCase):
+    def test_click_templates_validation_scoring_and_completion(self):
+        for variant in ['tug','boss','balloon','rocket','flower','tower','brand','popcorn']:
+            coop = variant in ['boss','rocket','flower','brand']
+            mechanic = 'light' if coop else 'tug' if variant == 'tug' else 'race'
+            config = {**CONFIG, 'clickVariant':variant, 'mechanic':mechanic, 'goal':10}
+            self.assertEqual(self.client.post('/rooms',json={**config,'inputMode':'shake'}).status_code,422)
+            created = self.client.post('/rooms',json=config).json()
+            rid = created['room']['id']
+            host = {'Authorization':'Bearer '+created['token']}
+            p = self.client.post(f'/rooms/{rid}/join',json={'name':'点击玩家','team':0}).json()
+            auth = {'Authorization':'Bearer '+p['token']}
+            self.client.post(f'/rooms/{rid}/command',json={'action':'start'},headers=host)
+            for seq in range(1,11):
+                self.assertTrue(self.client.post(f'/rooms/{rid}/tap',json={'seq':seq},headers=auth).json()['accepted'])
+            room = self.client.get(f'/rooms/{rid}').json()
+            self.assertEqual(room['config']['clickVariant'],variant)
+            self.assertEqual(room['scores'][0],10)
+            self.assertEqual(room['state'],'completed' if coop else 'running')
+            if not coop:
+                self.client.post(f'/rooms/{rid}/command',json={'action':'pause'},headers=host)
+                self.assertFalse(self.client.post(f'/rooms/{rid}/tap',json={'seq':11},headers=auth).json()['accepted'])
+                self.client.post(f'/rooms/{rid}/command',json={'action':'finish'},headers=host)
+            rematch=self.client.post(f'/rooms/{rid}/rematch',headers=host).json()
+            self.assertEqual(rematch['config']['clickVariant'],variant)
+
+    def test_swipe_direction_alternation_pause_and_snapshot(self):
+        for variant, direction, first, second in [('dragonboat','down','swipe-down','swipe-down'),('bicycle','alternating','swipe-left','swipe-right'),('climb','up','swipe-up','swipe-up')]:
+            created=self.client.post('/trials',json={**CONFIG,'raceVariant':variant,'inputMode':'swipe','swipeDirection':direction}).json()
+            rid=created['room']['id']
+            host={'Authorization':'Bearer '+created['token']}
+            player=self.client.post(f'/rooms/{rid}/join',json={'name':'滑屏测试','team':0}).json()
+            auth={'Authorization':'Bearer '+player['token']}
+            def tap(seq,kind):
+                return self.client.post(f'/rooms/{rid}/tap',json={'seq':seq,'kind':kind},headers=auth)
+            self.assertFalse(tap(1,first).json()['accepted'])
+            self.client.post(f'/rooms/{rid}/command',json={'action':'start'},headers=host)
+            self.assertEqual(tap(2,'tap').status_code,422)
+            self.assertEqual(tap(2,'swipe-up' if direction!='up' else 'swipe-down').status_code,422)
+            self.assertTrue(tap(2,first).json()['accepted'])
+            self.assertFalse(tap(2,first).json()['accepted'])
+            if direction=='alternating':
+                self.assertFalse(tap(3,first).json()['accepted'])
+            self.assertTrue(tap(4,second).json()['accepted'])
+            self.client.post(f'/rooms/{rid}/command',json={'action':'pause'},headers=host)
+            self.assertFalse(tap(5,first).json()['accepted'])
+            self.assertEqual(self.client.get(f'/rooms/{rid}').json()['scores'][0],2)
+            self.client.post(f'/rooms/{rid}/command',json={'action':'finish'},headers=host)
+            rematch=self.client.post(f'/rooms/{rid}/rematch',headers=host).json()
+            self.assertEqual(rematch['config']['swipeDirection'],direction)
+            self.assertEqual(rematch['config']['raceVariant'],variant)
+
+    def test_race_variants_survive_trial_and_rematch(self):
+        from main import Config
+        from pydantic import ValidationError
+        for variant in ['horse','yacht','car','motorbike','spaceship','rocket','penguin','balloon']:
+            created=self.client.post('/trials',json={**CONFIG,'raceVariant':variant,'inputMode':'shake'}).json()
+            rid=created['room']['id']
+            self.assertEqual(created['room']['config']['raceVariant'],variant)
+            host={'Authorization':'Bearer '+created['token']}
+            self.client.post(f'/rooms/{rid}/command',json={'action':'abort'},headers=host)
+            self.assertEqual(self.client.post(f'/rooms/{rid}/rematch',headers=host).json()['config']['raceVariant'],variant)
+        self.assertEqual(Config(**CONFIG).raceVariant,'horse')
+        with self.assertRaises(ValidationError):
+            Config(**{**CONFIG,'raceVariant':'invalid'})
     def test_reaction_hit_once_wrong_stale_pause_and_auth(self):
         created = self.client.post('/rooms', json={**CONFIG, 'mechanic': 'reaction'}).json()
         rid = created['room']['id']

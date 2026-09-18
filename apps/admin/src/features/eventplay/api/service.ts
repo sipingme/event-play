@@ -1,4 +1,13 @@
 import type { Activity, Brand, DemoRoom, GameConfig, Template, PublicEvent } from './types';
+import { controlGames } from './control-games.ts';
+import { quizGames } from './quiz-games.ts';
+import { drawGames } from './draw-games.ts';
+import { wallGames } from './wall-games.ts';
+import { socialGames } from './social-games.ts';
+import { createGames } from './create-games.ts';
+import { voteGames,defaultStory } from './vote-games.ts';
+import { coordinationGames } from './coordination.ts';
+import { clickGames } from './click-games.ts';
 const KEY = 'eventplay.activities.v1';
 const ROOM_KEY = 'eventplay.rooms.v1';
 export const DEFAULT_QUIZ = 'EventPlay 的玩家从哪里加入？|扫码进入|修改服务器|安装数据库|联系开发者|A\n团队互动最重要的是什么？|共同参与|只有主持人操作|关闭网络|不看规则|A';
@@ -51,13 +60,34 @@ export async function openAgenda(agenda: Agenda, next: boolean) {
   return result.room.id;
 }
 export const templates: Template[] = [
+  ...Object.entries(socialGames).map(([key,g]):Template=>({id:`social-${key}`,socialVariant:key as NonNullable<Template['socialVariant']>,name:g.name,description:g.description,category:'社交破冰',showcase:true,mechanic:'social',theme:'garden',teams:'阳光营地,星光营地',duration:600})),
+  ...Object.entries(createGames).map(([key,g]):Template=>({id:`create-${key}`,createVariant:key as NonNullable<Template['createVariant']>,createImage:'/games/click/garden-bg-v1.png',name:g.name,description:g.description,category:'群体共创',showcase:true,mechanic:'create',theme:'garden',teams:'共创一组,共创二组',duration:600})),
+  ...Object.entries(voteGames).map(([key,g]):Template=>({id:`vote-${key}`,voteVariant:key as NonNullable<Template['voteVariant']>,name:g.name,description:g.description,voteOptions:g.options,voteStory:defaultStory,voteLive:!['score','proposal'].includes(key),voteImages:key==='product'?'/games/click/flower-sprite-v1.png\n/games/race/illustrated/spaceship-sprite-v2.png\n/games/race/illustrated/car-sprite-v2.png\n/games/race/illustrated/yacht-sprite-v2.png':'',category:'投票与评分',showcase:true,mechanic:'vote',theme:'garden',teams:'来宾一组,来宾二组',duration:600})),
+  ...Object.entries(wallGames).map(([key,game]):Template=>({id:`wall-${key}`,wallVariant:key as NonNullable<Template['wallVariant']>,name:game.name,description:game.description,category:'签到与上墙',showcase:true,mechanic:'wall',theme:'garden',teams:'来宾一组,来宾二组',duration:600})),
+  ...([
+    ['yacht','碧海游艇赛','海岛、灯塔与白色浪花，轻摇手机乘风破浪。','garden'],
+    ['car','城市极速赛车','城市赛道与轮胎烟尘，为战队赛车加速。','garden'],
+    ['motorbike','公路摩托赛','山谷公路与机车骑手，追风冲向下一程。','garden'],
+    ['spaceship','星际飞船赛','穿越星环与星云，为战队飞船补充推进能量。','space'],
+    ['rocket','火箭升空','摇动为火箭充能，纵向攀升、向星空出发。','space'],
+    ['penguin','企鹅滑雪赛','萌趣企鹅沿雪道冲刺，扬起轻盈雪花。','garden'],
+    ['balloon','热气球竞赛','在暖色云海中缓缓升空，收集全场的热爱。','garden']
+  ] as const).map(([raceVariant,name,description,theme]):Template=>({id:`shake-${raceVariant}`,name,description,theme,raceVariant,category:'摇一摇',showcase:true,mechanic:'race',inputMode:'shake',teams:'阳光队,闪电队,追风队',duration:60})),
   { id: 'shake-race', name: '欢乐摇摇赛马', category: '摇一摇', description: '轻摇手机，让卡通小马为战队冲刺；不支持传感器时可点击备用。', mechanic: 'race', inputMode: 'shake', featured: true, theme: 'garden', teams: '阳光队,闪电队,追风队', duration: 60 },
-  { id: 'swipe-money', name: '财富滑滑乐', category: '滑屏', description: '向上滑动财富卡，一划一分。比手速，不涉及现金奖励。', mechanic: 'money', featured: true, theme: 'gold', teams: '招财队,丰收队', duration: 60 },
+  ...([
+    ['dragonboat','龙舟竞渡','向下滑动划桨，让战队龙舟乘风破浪。','down'],
+    ['bicycle','自行车冲刺','左右交替滑动蹬踏，连续同侧不计分。','alternating'],
+    ['climb','步步高升','向上滑动攀登，为战队点亮更高楼层。','up']
+  ] as const).map(([raceVariant,name,description,swipeDirection]):Template=>({id:`swipe-${raceVariant}`,name,description,swipeDirection,raceVariant,category:'滑屏',showcase:true,mechanic:'race',inputMode:'swipe',theme:'garden',teams:'阳光队,闪电队,追风队',duration:60})),
+  { id: 'swipe-money', name: '疯狂数钱', category: '滑屏', description: '向上滑动财富卡，一划一分。比手速，不涉及现金奖励。', mechanic: 'money', featured: true, theme: 'gold', teams: '招财队,丰收队', duration: 60 },
+  ...Object.entries(clickGames).map(([clickVariant,game]):Template=>({id:`click-${clickVariant}`,clickVariant:clickVariant as NonNullable<Template['clickVariant']>,name:game.name,description:game.description,category:'点击',showcase:true,mechanic:game.mechanic,inputMode:'tap',theme:'garden',teams:'阳光队,闪电队',duration:60,goal:200})),
   { id: 'click-sprint', name: '左右冲刺赛', category: '点击', description: '左右交替迈步，为战队积累步数；连续同侧不计分。', mechanic: 'alternating', featured: true, theme: 'garden', teams: '活力队,飞跃队', duration: 60 },
+  ...Object.entries(coordinationGames).filter(([key])=>key!=='mole').map(([reactionVariant,game]):Template=>({id:`reaction-${reactionVariant}`,reactionVariant:reactionVariant as NonNullable<Template['reactionVariant']>, name:game.name,description:game.description,category:'手眼协调',showcase:true,mechanic:'reaction',theme:'garden',teams:'眼力队,敏捷队',duration:60})),
   { id: 'reaction-mole', name: '萌鼠出没', category: '手眼协调', description: '看准九宫格里的小地鼠，每轮只能出手一次，命中得分。', mechanic: 'reaction', featured: true, theme: 'garden', teams: '眼力队,敏捷队', duration: 60 },
-  { id: 'control-coins', name: '接住好运', category: '控制', description: '左右移动篮子，接住三条轨道里的金币；服务器统一判定。', mechanic: 'catch', featured: true, theme: 'gold', teams: '好运队,宝藏队', duration: 60 },
-  { id: 'quiz-space', name: '品牌知识闯关', category: '知识互动', description: '分题限时作答，每题结算后计分，支持自定义单选题。', mechanic: 'quiz', theme: 'space', teams: '智慧队,探索队', duration: 60 },
-  { id: 'draw-gold', name: '现场幸运抽奖', category: '抽奖互动', description: '从已入场玩家中随机抽取，结果锁定，无实际奖品发放。', mechanic: 'draw', theme: 'gold', teams: '来宾一组,来宾二组', duration: 120 },
+  ...Object.entries(controlGames).filter(([key])=>key!=='coins').map(([controlVariant,game]):Template=>({id:`control-${controlVariant}`,controlVariant:controlVariant as NonNullable<Template['controlVariant']>,name:game.name,description:game.description,category:'控制',showcase:true,mechanic:'catch',theme:'garden',teams:'探索队,冒险队',duration:60})),
+  { id: 'control-coins', controlVariant:'coins', name: '接住好运', category: '控制', description: controlGames.coins.description, mechanic: 'catch', featured: true, theme: 'gold', teams: '好运队,宝藏队', duration: 60 },
+  ...Object.entries(quizGames).map(([key, game]): Template => ({id:key === 'adventure' ? 'quiz-space' : `quiz-${key}`, quizVariant:key as NonNullable<Template['quizVariant']>, ...game, category:'知识答题', showcase:true, mechanic:'quiz', theme:'garden', teams:'智慧队,探索队', duration:60, goal:100})),
+  ...Object.entries(drawGames).map(([key,game]):Template=>({id:key==='list'?'draw-gold':`draw-${key}`,drawVariant:key as NonNullable<Template['drawVariant']>,name:game.name,description:game.description,category:'抽奖互动',showcase:true,mechanic:'draw',theme:'garden',teams:'来宾一组,来宾二组',duration:120,goal:20})),
   { id: 'catch-garden', name: '接金币大作战', category: '动作游戏', description: '左右移动接住金币，每次接到加一分，由服务器判定。', mechanic: 'catch', theme: 'garden', teams: '金币队,宝藏队', duration: 60 },
   { id: 'alternating-space', name: '左右冲刺', category: '节奏协作', description: '左右交替点击，为战队加速；连续同侧不计分。', mechanic: 'alternating', theme: 'space', teams: '星河队,闪电队', duration: 90 },
   { id: 'light-gold', name: '共同点亮品牌', category: '全场共创', description: '全场一起贡献能量，达成目标后共同点亮品牌。', mechanic: 'light', theme: 'gold', teams: '星光队,热爱队', duration: 120 },
@@ -125,19 +155,48 @@ function write<T>(key: string, data: T): void {
 }
 export function configOf(a: GameConfig): GameConfig {
   const { name, description, mechanic, theme, duration, participants, teams, brand, logo, goal, quizText, winnerCount } = a;
-  return { name, description, mechanic, theme, duration, participants, teams, brand, logo, inputMode: a.inputMode ?? 'tap', goal: goal ?? 1000, quizText: quizText ?? DEFAULT_QUIZ, winnerCount: winnerCount ?? 1, prizeName: a.prizeName ?? '幸运奖', catchDifficulty: a.catchDifficulty ?? 'normal' };
+  return { name, description, mechanic, theme, duration, participants, teams, brand, logo, socialVariant:a.socialVariant,createVariant:a.createVariant,createImage:a.createImage??'/games/click/garden-bg-v1.png',voteVariant:a.voteVariant,voteOptions:a.voteOptions??'方案A\n方案B\n方案C\n方案D',voteImages:a.voteImages??'',voteStory:a.voteStory??defaultStory,voteLive:a.voteLive??true,voteChange:a.voteChange??false, wallVariant:a.wallVariant, drawVariant:a.drawVariant, drawRepeat:a.drawRepeat??false, quizVariant:a.quizVariant, controlVariant:a.controlVariant, reactionVariant: a.reactionVariant, clickVariant: a.clickVariant, raceVariant: a.raceVariant ?? 'horse', inputMode: a.inputMode ?? 'tap', swipeDirection: a.swipeDirection ?? 'up', goal: goal ?? 1000, quizText: quizText ?? DEFAULT_QUIZ, winnerCount: winnerCount ?? 1, prizeName: a.prizeName ?? '幸运奖', catchDifficulty: a.catchDifficulty ?? 'normal' };
 }
 export function validateConfig(value: GameConfig): string[] {
   const errors: string[] = [];
-  if (!['race', 'tug', 'money', 'alternating', 'light', 'quiz', 'draw', 'catch', 'reaction'].includes(value.mechanic)) errors.push('不支持的玩法');
-  if (!['tap', 'shake'].includes(value.inputMode ?? 'tap')) errors.push('输入方式无效');
+  if(value.socialVariant&&(!(value.socialVariant in socialGames)||value.mechanic!=='social'))errors.push('破冰场景与玩法不匹配');
+  if(value.createVariant&&(!(value.createVariant in createGames)||value.mechanic!=='create'))errors.push('共创场景与玩法不匹配');
+  if(value.mechanic==='create'&&(!value.createImage?.startsWith('/games/')||/\.\.|[?#]/.test(value.createImage)))errors.push('共创图片须为 /games/ 本地路径');
+  if(value.voteVariant&&(!(value.voteVariant in voteGames)||value.mechanic!=='vote'))errors.push('投票场景与玩法不匹配');
+  if(value.mechanic==='vote'){
+    const opts=(value.voteOptions??'方案A\n方案B\n方案C\n方案D').split('\n').map(s=>s.trim()).filter(Boolean);
+    if(opts.length<2||opts.length>8||new Set(opts).size!==opts.length||opts.some(s=>s.length>60))errors.push('需要2～8个不同选项，每项最多60字');
+    if(value.voteVariant==='stance'&&opts.length!==2)errors.push('观点站需要2个选项');
+    if(value.voteVariant==='satisfaction'&&opts.length!==5)errors.push('满意度需要5个等级选项');
+    if(value.voteVariant==='bracket'&&![2,4,8].includes(opts.length))errors.push('淘汰赛需要2、4或8个选项');
+    if(value.voteVariant==='story'){try{JSON.parse(value.voteStory??defaultStory);}catch{errors.push('剧情JSON格式错误');}}
+    const images=(value.voteImages??'').split('\n').filter(Boolean);if(images.length&&(images.length!==opts.length||images.some(p=>!p.startsWith('/games/')||/\.\.|[?#]/.test(p))))errors.push('图片须与选项一一对应，使用 /games/ 本地路径');
+  }
+  if (value.wallVariant && (!(value.wallVariant in wallGames)||value.mechanic!=='wall')) errors.push('签到场景与玩法不匹配');
+  if (value.drawVariant && (!(value.drawVariant in drawGames) || value.mechanic!=='draw')) errors.push('抽奖场景与玩法不匹配');
+  if (value.controlVariant && (!(value.controlVariant in controlGames) || value.mechanic !== 'catch')) errors.push('控制场景与玩法不匹配');
+  if (value.reactionVariant && (!(value.reactionVariant in coordinationGames) || value.mechanic !== 'reaction')) errors.push('手眼协调场景与玩法不匹配');
+  if (value.clickVariant && (!clickGames[value.clickVariant] || clickGames[value.clickVariant].mechanic !== value.mechanic || (value.inputMode ?? 'tap') !== 'tap')) errors.push('点击场景与玩法不匹配');
+  if (!['horse','yacht','car','motorbike','spaceship','rocket','penguin','balloon','dragonboat','bicycle','climb'].includes(value.raceVariant ?? 'horse')) errors.push('竞速场景无效');
+  if (!['race', 'tug', 'money', 'alternating', 'light', 'quiz', 'draw', 'catch', 'reaction', 'wall', 'vote', 'create', 'social'].includes(value.mechanic)) errors.push('不支持的玩法');
+  if (!['up', 'down', 'alternating'].includes(value.swipeDirection ?? 'up')) errors.push('滑动方向无效');
+  if (!['tap', 'shake', 'swipe'].includes(value.inputMode ?? 'tap')) errors.push('输入方式无效');
   if (!['easy', 'normal', 'hard'].includes(value.catchDifficulty ?? 'normal')) errors.push('接金币难度无效');
   if (!(value.prizeName ?? '幸运奖').trim() || (value.prizeName ?? '幸运奖').length > 60) errors.push('奖项名称须为1～60字');
   if (value.mechanic === 'draw' && (!Number.isInteger(value.winnerCount ?? 1) || (value.winnerCount ?? 1) < 1 || (value.winnerCount ?? 1) > Math.min(100, value.participants))) errors.push('中奖名额须为1～100，且不超过预计人数');
+  if (value.quizVariant && (!(value.quizVariant in quizGames) || value.mechanic !== 'quiz')) errors.push('答题场景与玩法不匹配');
   if (value.mechanic === 'quiz') {
     const lines = (value.quizText ?? DEFAULT_QUIZ).split('\n').filter((s) => s.trim());
     if (!lines.length || lines.length > 20 || value.duration < lines.length * 5) errors.push('需要1～20题，每题至少5秒');
-    if (lines.some((line) => { const p = line.split('|').map((s) => s.trim()); return p.length !== 6 || p.some((s) => !s) || !/^[ABCD]$/i.test(p[5]) || p[0].length > 200 || p.slice(1, 5).some((s) => s.length > 100); })) errors.push('题目格式或长度错误：题目|A选项|B选项|C选项|D选项|正确字母');
+    for (const line of lines) {
+      const p = line.split('|').map(s=>s.trim());
+      if (value.quizVariant === 'boolean' && (p[1] !== '对' || p[2] !== '错' || !/^[AB]$/i.test(p[5]??''))) errors.push('判断题A/B须为对/错，答案为A或B');
+      if (value.quizVariant === 'picture' && !p[6]) errors.push('每题需要题图路径');
+      if (p[6] && (!p[6].startsWith('/games/') || /\.\.|[?#]/.test(p[6]))) errors.push('题图仅支持 /games/ 本地素材');
+      const clues=p[7]?.split('~')??[];
+      if (clues.length > 3 || clues.some(c=>!c.trim() || c.length>100) || value.quizVariant==='clues' && clues.length!==3) errors.push('线索题需要3条线索，每条1～100字');
+    }
+    if (lines.some((line) => { const p = line.split('|').map((s) => s.trim()); return ![6,7,8].includes(p.length) || p.slice(0,6).some((s) => !s) || !/^[ABCD]$/i.test(p[5]) || p[0].length > 200 || p.slice(1, 5).some((s) => s.length > 100); })) errors.push('题目格式或长度错误：题目|A选项|B选项|C选项|D选项|正确字母');
   }
   if (value.goal !== undefined && (!Number.isInteger(value.goal) || value.goal < 10 || value.goal > 100000)) errors.push('共同目标须为 10～100000 的整数');
   if (!value.name.trim() || value.name.length > 60) errors.push('活动名称须为 1～60 个字符');

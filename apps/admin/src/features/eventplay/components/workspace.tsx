@@ -15,7 +15,8 @@ import { activitiesQuery, eventKeys } from '../api/queries';
 import { archiveActivity, configOf, createActivity, templates } from '../api/service';
 import type { Activity, Template } from '../api/types';
 import { Stage } from './stage';
-import { StarterGames, TemplatePoster, gameCategories } from './template-experience';
+import { StarterGames, TemplatePoster } from './template-experience';
+import { catalogCategories, catalogMembership, plannedGames, visibleTemplates } from '../api/template-catalog';
 
 export function TemplateCard({ template }: { template: Template }) {
   return (
@@ -25,12 +26,12 @@ export function TemplateCard({ template }: { template: Template }) {
         className='block p-2'
         aria-label={`使用${template.name}模板`}
       >
-        {template.featured ? <TemplatePoster template={template}/> : <Stage compact config={{ ...template, participants: 200, brand: 'EventPlay', logo: '' }} />}
+        {template.featured || template.showcase ? <TemplatePoster template={template}/> : <Stage compact config={{ ...template, participants: 200, brand: 'EventPlay', logo: '' }} />}
       </Link>
       <CardContent className='pb-5'>
         <div className='mb-2 flex items-center justify-between'>
           <h3 className='font-medium'>{template.name}</h3>
-          <Badge variant='secondary'>{template.category}</Badge>
+          <Badge variant='secondary'>{catalogMembership(template)[0]}</Badge>
         </div>
         <p className='text-xs leading-5 text-muted-foreground'>{template.description}</p>
         <div className='mt-4 flex items-center justify-between text-xs text-muted-foreground'>
@@ -105,7 +106,7 @@ function ActivityRows({ items }: { items: Activity[] }) {
                 </p>
               </td>
               <td>
-                {{ money: '数钱挑战', race: '团队竞速', tug: '团队拔河', alternating: '左右冲刺', light: '共同点亮', quiz: '答题闯关', draw: '基础抽奖', catch: '接金币', reaction: '萌鼠出没' }[a.mechanic]}
+                {{ money: '数钱挑战', race: '团队竞速', tug: '团队拔河', alternating: '左右冲刺', light: '共同点亮', quiz: '答题闯关', draw: '基础抽奖', catch: '接金币', reaction: '萌鼠出没', wall:'签到上墙',social:'社交破冰',create:'群体共创',vote:'投票评分' }[a.mechanic]}
                 <p className='mt-1 text-xs text-muted-foreground'>预计 {a.participants} 人</p>
               </td>
               <td>
@@ -221,7 +222,7 @@ export function Workspace() {
           </Link>
         </div>
         <div className='grid gap-4 md:grid-cols-3'>
-          {templates.filter(t=>!t.featured).slice(0, 3).map((t) => (
+          {templates.filter(t=>t.showcase).slice(0, 3).map((t) => (
             <TemplateCard key={t.id} template={t} />
           ))}
         </div>
@@ -281,29 +282,52 @@ export function Activities() {
 }
 export function Templates() {
   const [filter, setFilter] = useState('全部');
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState('全部状态');
+  const query = search.trim().toLocaleLowerCase();
+  const ready = visibleTemplates(templates).filter((t) =>
+    (filter === '全部' || catalogMembership(t).includes(filter)) &&
+    `${t.name} ${t.description} ${catalogMembership(t).join(' ')}`.toLocaleLowerCase().includes(query)
+  );
+  const planned = plannedGames.filter((t) =>
+    (filter === '全部' || t.category === filter) &&
+    `${t.name} ${t.description} ${t.category}`.toLocaleLowerCase().includes(query)
+  );
   return (
     <PageContainer
       pageTitle='游戏体验库'
       pageDescription='先看效果、扫码体验，再一键创建属于你的品牌活动。'
     >
       <div className='my-4 flex flex-wrap gap-2'>
-        {['全部', ...gameCategories, '更多玩法'].map((s) => (
+        {['全部', ...catalogCategories].map((s) => (
           <Button
             key={s}
             variant={filter === s ? 'default' : 'outline'}
+            aria-pressed={filter === s}
             onClick={() => setFilter(s)}
           >
             {s}
           </Button>
         ))}
       </div>
-      <div className='grid gap-5 md:grid-cols-2 xl:grid-cols-3'>
-        {templates
-          .filter((t) => filter === '全部' || (filter === '更多玩法' ? !t.featured : t.featured && t.category === filter))
-          .map((t) => (
-            <TemplateCard key={t.id} template={t} />
-          ))}
+      <div className='mb-6 flex flex-wrap items-center gap-2'>
+        <Input className='w-full sm:max-w-xs' aria-label='搜索玩法' placeholder='搜索玩法名称、场景…' value={search} onChange={(e) => setSearch(e.target.value)} />
+        {['全部状态', '可试玩', '规划中'].map((s) => <Button key={s} variant={status === s ? 'secondary' : 'ghost'} aria-pressed={status === s} onClick={() => setStatus(s)}>{s}</Button>)}
       </div>
+      <p className='mb-4 text-sm text-muted-foreground' role='status'>当前分类与搜索：{ready.length} 个可试玩 · {planned.length} 个规划中。共创玩法可跨分类展示，“全部”中不重复。</p>
+      {status !== '规划中' && <section aria-label='可试玩玩法'>
+        <h2 className='mb-4 text-lg font-semibold'>可试玩 · {ready.length}</h2>
+        {ready.length ? <div className='grid gap-5 md:grid-cols-2 xl:grid-cols-3'>{ready.map((t) => <TemplateCard key={t.id} template={t} />)}</div> : <p className='rounded-xl border border-dashed p-8 text-center text-muted-foreground'>暂无符合条件的可试玩玩法。可查看下方规划或切换分类。</p>}
+      </section>}
+      {status !== '可试玩' && <section className='mt-8' aria-label='规划中玩法'>
+        <h2 className='mb-2 text-lg font-semibold'>规划中 · {planned.length}</h2>
+        <p className='mb-4 text-sm text-muted-foreground'>以下是待开发方向，暂不能试玩或创建活动；不是已上线游戏。</p>
+        {planned.length ? <div className='grid gap-4 md:grid-cols-2 xl:grid-cols-3'>{planned.map((t) => <Card key={t.id} className='border-dashed shadow-none'><CardContent>
+          <div className='mb-3 flex items-center justify-between gap-2'><h3 className='font-medium'>{t.name}</h3><Badge variant='outline'>规划中</Badge></div>
+          <p className='mb-2 text-xs text-muted-foreground'>{t.category}</p>
+          <p className='text-sm text-muted-foreground'>{t.description}</p>
+        </CardContent></Card>)}</div> : <p className='py-4 text-sm text-muted-foreground'>暂无符合条件的规划玩法。</p>}
+      </section>}
       <p className='mt-6 text-xs text-muted-foreground'>
         保存并发布活动后，在联机主持端邀请 H5 玩家参与。当前为预览版，不涉及真实奖品。
       </p>

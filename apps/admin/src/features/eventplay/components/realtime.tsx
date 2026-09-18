@@ -1,4 +1,5 @@
 'use client';
+import { clickGames } from '../api/click-games';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -29,7 +30,13 @@ import { ClientReady, PageError } from './shell';
 import { Stage } from './stage';
 import { MoneyInput } from './money-input';
 import { ShakeInput } from './shake-input';
+import { SwipeInput } from './swipe-input';
+import type { InputKind } from '../api/types';
 import { GamePanel } from './game-panels';
+import { WallAdmin } from './wall-scene';
+import { SocialAdmin } from './social-scene';
+import { CreateAdmin } from './create-scene';
+import { VoteAdmin } from './vote-scene';
 import { ScreenPresentation } from './screen-presentation';
 import { HostAgenda } from './host-agenda';
 import { cloudToken } from '../api/service';
@@ -152,7 +159,7 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
   const teams = data.config.teams.split(',');
   const player = data.players.find((p) => p.id === session?.playerId);
   const ended = data.state === 'completed' || data.state === 'aborted';
-  const special = ['quiz', 'draw', 'catch', 'reaction'].includes(data.config.mechanic);
+  const special = ['quiz', 'draw', 'catch', 'reaction', 'wall', 'vote', 'create', 'social'].includes(data.config.mechanic);
   const profile = playerProfile(data.agendaId);
   const form = useAppForm({
     defaultValues: { name: profile.name, team: String(Math.max(0, teams.indexOf(profile.team))) },
@@ -178,7 +185,7 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
       setBusy(false);
     }
   }
-  async function tap(side?: 'left' | 'right' | 'tap' | 'shake') {
+  async function tap(side?: InputKind) {
     if (inputPending.current || busy || !connected || data.state !== 'running') return;
     inputPending.current = true;
     setBusy(true);
@@ -214,7 +221,7 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
         <div className='absolute inset-0 flex items-center justify-center bg-black/65 text-center text-white'>
           <div>
             <p className='text-3xl font-semibold'>
-              {data.blackout ? '画面暂时隐藏' : data.config.mechanic === 'light' && data.state === 'completed' ? data.scores.reduce((sum, score) => sum + score, 0) >= (data.config.goal ?? 1000) ? '全场点亮成功！' : '时间到，本次点亮未达目标' : labels[data.state]}
+              {data.blackout ? '画面暂时隐藏' : data.config.mechanic === 'light' && data.state === 'completed' ? data.scores.reduce((sum, score) => sum + score, 0) >= (data.config.goal ?? 1000) ? (data.config.clickVariant ? clickGames[data.config.clickVariant].success : '全场点亮成功！') : '时间到，本次共同目标未达成' : labels[data.state]}
             </p>
             <p className='mt-3'>联机测试 · 以服务端成绩为准</p>
           </div>
@@ -235,7 +242,7 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
         {status}
         <ScreenPresentation room={data} connected={connected} />
         {stage}
-        {!['race', 'draw'].includes(data.config.mechanic) && <div className='mt-5 grid grid-cols-2 gap-3 md:grid-cols-4'>
+        {!['race', 'draw', 'social'].includes(data.config.mechanic) && <div className='mt-5 grid grid-cols-2 gap-3 md:grid-cols-4'>
           {teams.map((name, i) => (
             <div key={name} className='rounded-xl border p-5 text-xl'>
               {name}
@@ -287,39 +294,39 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
               {(pending) => (
                 <Button
                   className='h-12 w-full'
-                  disabled={pending || !connected || data.state !== 'waiting' || !!data.countdown}
+                  disabled={pending || !connected || (data.state !== 'waiting' && !(['wall','create','social'].includes(data.config.mechanic)&&data.state==='running')) || !!data.countdown}
                   type='submit'
                 >
                   {pending ? '加入中…' : '加入活动'}
                 </Button>
               )}
             </form.Subscribe>
-            {data.state !== 'waiting' && <p className='text-sm'>本局已开场，暂不接受新玩家。</p>}
+            {data.state !== 'waiting' && !['wall','create','social'].includes(data.config.mechanic) && <p className='text-sm'>本局已开场，暂不接受新玩家。</p>}
           </form>
         ) : (
           <>
-            {data.state === 'waiting' && <div role='status' className='mb-5 rounded-xl border bg-muted p-5'><strong>已成功入场，请等待主持人开始</strong><p className='mt-2 text-sm'>无需重复加入。你的队伍：{player ? teams[player.team] : '正在同步'}。如长时间未开场，请向主持人确认房间 ID：{id}。</p></div>}
+            {data.state === 'waiting' && !['wall','create','social'].includes(data.config.mechanic) && <div role='status' className='mb-5 rounded-xl border bg-muted p-5'><strong>已成功入场，请等待主持人开始</strong><p className='mt-2 text-sm'>无需重复加入。你的队伍：{player ? teams[player.team] : '正在同步'}。如长时间未开场，请向主持人确认房间 ID：{id}。</p></div>}
             <div className='rounded-2xl border p-5'>
               <p>
                 {player?.name || '正在恢复身份…'} · {player ? teams[player.team] : ''}
               </p>
               <div className='mt-5 flex justify-between'>
                 <div>
-                  <p className='text-xs text-muted-foreground'>我的贡献</p>
-                  <strong className='text-4xl'>{player?.score ?? 0}</strong>
+                  <p className='text-xs text-muted-foreground'>{['create','social'].includes(data.config.mechanic)?'参与状态':data.config.mechanic==='vote'?'当前轮次':data.config.mechanic==='wall'?'签到状态':'我的贡献'}</p>
+                  <strong className='text-4xl'>{['create','social'].includes(data.config.mechanic)?'已加入':data.config.mechanic==='vote'?`第 ${(data.game?.round??0)+1} 轮`:data.config.mechanic==='wall'?'已签到':player?.score ?? 0}</strong>
                 </div>
                 <div>
-                  <p className='text-xs text-muted-foreground'>剩余时间</p>
-                  <strong className='font-mono text-4xl'>{data.remaining}s</strong>
+                  <p className='text-xs text-muted-foreground'>{['wall','vote','create','social'].includes(data.config.mechanic)?'参与方式':'剩余时间'}</p>
+                  <strong className='font-mono text-4xl'>{data.config.mechanic==='social'?'自愿互动':data.config.mechanic==='create'?'共同创作':data.config.mechanic==='vote'?'按轮提交':data.config.mechanic==='wall'?'手机投稿':`${data.remaining}s`}</strong>
                 </div>
               </div>
             </div>
-            {special ? <GamePanel room={data} playerId={player?.id} connected={connected} /> : data.config.mechanic === 'race' && data.config.inputMode === 'shake' ? <ShakeInput disabled={!connected || !player || data.state !== 'running' || busy} onInput={(kind) => void tap(kind)} /> : data.config.mechanic === 'alternating' ? <div className='my-8 space-y-3'><p className='text-center'>左右交替点击 · 建议下一次：{nextSide === 'left' ? '左' : '右'}</p><div className='grid grid-cols-2 gap-4'>{(['left', 'right'] as const).map((side) => <Button key={side} className='h-36 touch-manipulation text-3xl' variant={side === nextSide ? 'default' : 'outline'} disabled={!connected || !player || data.state !== 'running' || busy} onClick={() => tap(side)}>{side === 'left' ? '左' : '右'}</Button>)}</div></div> : data.config.mechanic === 'money' ? <MoneyInput disabled={!connected || !player || data.state !== 'running' || busy} onSwipe={() => tap()} /> : <Button
+            {special ? <GamePanel room={data} playerId={player?.id} connected={connected} /> : data.config.mechanic === 'race' && data.config.inputMode === 'shake' ? <ShakeInput disabled={!connected || !player || data.state !== 'running' || busy} onInput={(kind) => void tap(kind)} /> : data.config.mechanic === 'race' && data.config.inputMode === 'swipe' ? <SwipeInput disabled={!connected || !player || data.state !== 'running' || busy} direction={data.config.swipeDirection ?? 'up'} nextSide={nextSide} onInput={(kind) => void tap(kind)} /> : data.config.mechanic === 'alternating' ? <div className='my-8 space-y-3'><p className='text-center'>左右交替点击 · 建议下一次：{nextSide === 'left' ? '左' : '右'}</p><div className='grid grid-cols-2 gap-4'>{(['left', 'right'] as const).map((side) => <Button key={side} className='h-36 touch-manipulation text-3xl' variant={side === nextSide ? 'default' : 'outline'} disabled={!connected || !player || data.state !== 'running' || busy} onClick={() => tap(side)}>{side === 'left' ? '左' : '右'}</Button>)}</div></div> : data.config.mechanic === 'money' ? <MoneyInput score={player?.score ?? 0} brand={data.config.brand} disabled={!connected || !player || data.state !== 'running' || busy} onSwipe={() => tap()} /> : <Button
               className='my-8 h-48 w-full touch-manipulation select-none rounded-full text-2xl active:scale-95'
               disabled={!connected || !player || data.state !== 'running'}
               onClick={() => tap()}
             >
-              {data.state === 'running' ? data.config.mechanic === 'light' ? '贡献能量，一起点亮！' : '点击，为战队加速！' : labels[data.state]}
+              {data.state === 'running' ? data.config.clickVariant ? clickGames[data.config.clickVariant].action : data.config.mechanic === 'light' ? '贡献能量，一起点亮！' : '点击，为战队加速！' : labels[data.state]}
             </Button>}
             <p className='text-center text-xs text-muted-foreground'>
               {special ? '规则由服务器判定 · 断线请等待重连' : '每次有效操作 +1 分 · 服务端限速 · 断线不补发'}
@@ -327,10 +334,10 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
             {ended && (
               <div className='mt-6 rounded-xl border p-5'>
                 <h2 className='font-semibold'>
-                  {data.state === 'aborted' ? '本局已中止，不评定胜负' : '本局贡献战报'}
+                  {data.state === 'aborted' ? '本局已中止，不评定胜负' : data.config.mechanic==='social'?'本场破冰已结束':'本局贡献战报'}
                 </h2>
                 <p className='mt-3'>
-                  {player?.name}：贡献 {player?.score ?? 0} 分
+                  {data.config.mechanic==='social'?'感谢你的参与，愿今天的交流成为新的连接。':<>{player?.name}：贡献 {player?.score ?? 0} 分</>}
                 </p>
                 <p className='mt-2 text-xs text-muted-foreground'>联调成绩，不涉及奖品发放。</p>
               </div>
@@ -401,15 +408,25 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
         )}
         <div className='grid gap-5 lg:grid-cols-[1.6fr_1fr]'>
           {stage}
+          {data.config.mechanic==='social'&&hasOwner&&<PageError><Suspense fallback={<p>加载破冰控制…</p>}><SocialAdmin room={data}/></Suspense></PageError>}
+          {data.config.mechanic==='create'&&hasOwner&&<PageError><Suspense fallback={<p>加载共创控制…</p>}><CreateAdmin room={data}/></Suspense></PageError>}
+          {data.config.mechanic==='vote'&&hasOwner&&<VoteAdmin room={data}/>}
+          {data.config.mechanic==='wall'&&hasOwner&&<PageError><Suspense fallback={<p>加载审核区…</p>}><WallAdmin id={id}/></Suspense></PageError>}
           <Card>
             <CardContent>
-              <p>剩余时间</p>
+              <p>{data.config.mechanic==='social'?'破冰阶段':data.config.mechanic==='create'?'共创阶段':data.config.mechanic==='vote'?'主持人控制轮次':data.config.mechanic==='wall'?'签到阶段':'剩余时间'}</p>
               {data.state === 'waiting' && !data.countdown && <fieldset className='mt-3 space-y-2 rounded-lg border p-3'><legend className='text-sm font-semibold'>开场检查（主持人手动确认）</legend>{['大屏画面已正确投放','音量与游戏规则已确认'].map((item)=><label key={item} className='flex items-center gap-2 text-sm'><input type='checkbox' checked={checks.includes(item)} onChange={(e)=>setChecks((old)=>e.target.checked?[...old,item]:old.filter((text)=>text!==item))} />{item}</label>)}<p className='text-xs text-muted-foreground'>在线状态来自最近15秒心跳，切后台可能离线。大屏页面连接不代表投影设备或音量正常，仍需目视确认。</p></fieldset>}
               {data.state === 'waiting' && <p className='mt-3 text-sm'>{!hasOwner ? '请先恢复主持权限。' : !connected ? '连接恢复后才可开始。' : !data.players.length ? '等待至少一位玩家加入后，即可开始比赛。' : `已有 ${data.players.length} 人入场，可以开始比赛。`}</p>}
-              <p className='my-5 font-mono text-6xl'>{data.remaining}s</p>
+              <p className='my-5 font-mono text-3xl'>{['wall','vote','create','social'].includes(data.config.mechanic)?labels[data.state]:`${data.remaining}s`}</p>
               <div className='flex flex-wrap gap-3'>
                 {!!data.countdown && <Button variant='outline' disabled={busy || !connected || !hasOwner} onClick={()=>command('cancel_countdown')}>取消倒计时，重新开放入场</Button>}
                 {data.config.mechanic === 'draw' && data.state === 'running' && <Button disabled={busy || !connected || !hasOwner} onClick={() => setConfirm('draw')}>抽取并锁定结果</Button>}
+                {!!data.game?.result&&<><Button disabled={busy||!connected||!hasOwner} onClick={()=>command('reveal_draw')}>代揭晓全部</Button><Button variant='outline' onClick={()=>{
+                  const result=data.game?.result;if(!result)return;
+                  const cell=(value:string)=>'"'+(/^[=+@\-\t\r]/.test(value)?"'":'')+value.replaceAll('"','""')+'"';
+                  const csv='\uFEFF'+[['房间','奖项','玩家ID','昵称','开奖时间'],...result.winners.map(w=>[data.id,result.prizeName??'',w.id,w.name,new Date(result.at).toISOString()])].map(row=>row.map(cell).join(',')).join('\r\n');
+                  const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='EventPlay-winners.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+                }}>导出中奖名单</Button></>}
                 {(data.state === 'waiting'
                   ? [['start', '开始比赛']]
                   : data.state === 'running'
@@ -484,20 +501,20 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
         <div className='mt-5 grid gap-5 md:grid-cols-2'>
           <Card>
             <CardContent>
-              <h2 className='mb-4 font-semibold'>战队成绩</h2>
+              <h2 className='mb-4 font-semibold'>{data.config.mechanic==='social'?'营地参与':'战队成绩'}</h2>
               {teams.map((name, i) => (
                 <div key={name} className='flex justify-between border-t py-3'>
                   <span>{name}</span>
-                  <strong>{data.scores[i]} 分</strong>
+                  <strong>{data.config.mechanic==='social'?(data.game?.social?.groups[i]?.members??0)+' 人':data.scores[i]+' 分'}</strong>
                 </div>
               ))}
-              <h2 className='my-4 font-semibold'>玩家贡献（前 20 名，同分并列）</h2>
+              <h2 className='my-4 font-semibold'>{data.config.mechanic==='social'?'入场玩家（前 20 位）':'玩家贡献（前 20 名，同分并列）'}</h2>
               {ranking.slice(0, 20).map((p) => (
                 <div key={p.id} className='flex justify-between border-t py-2 text-sm'>
                   <span>
-                    {p.name} · {teams[p.team]}
+                    {p.name}{data.config.mechanic!=='social'&&<> · {teams[p.team]}</>}
                   </span>
-                  <span>{p.score}</span>
+                  {data.config.mechanic!=='social'&&<span>{p.score}</span>}
                 </div>
               ))}
             </CardContent>

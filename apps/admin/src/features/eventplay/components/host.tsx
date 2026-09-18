@@ -135,7 +135,7 @@ export function HostLobby() {
                   <Badge variant='secondary'>v{item.release!.version}</Badge>
                 </div>
                 <p className='text-sm text-muted-foreground'>
-                  {{ money: '数钱挑战', race: '团队竞速', tug: '团队拔河', alternating: '左右冲刺', light: '共同点亮', quiz: '答题闯关', draw: '基础抽奖', catch: '接金币', reaction: '萌鼠出没' }[item.release!.config.mechanic]} ·{' '}
+                  {{ money: '数钱挑战', race: '团队竞速', tug: '团队拔河', alternating: '左右冲刺', light: '共同点亮', quiz: '答题闯关', draw: '基础抽奖', catch: '接金币', reaction: '萌鼠出没', wall:'签到上墙',social:'社交破冰',create:'群体共创',vote:'投票评分' }[item.release!.config.mechanic]} ·{' '}
                   {item.release!.config.duration} 秒 · 预计 {item.release!.config.participants} 人
                 </p>
                 <Button className='h-12 w-full' disabled={!!busy} onClick={() => enterLive(item.id, item.release!.config)}>

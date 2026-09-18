@@ -87,3 +87,70 @@
 @media(prefers-reduced-motion:reduce) {
   .scene *, .scene[data-moving='true'] .horse, .scene[data-moving='true'] .dust { animation:none!important; transition:none!important; }
 }
+.illustrated .runner { height:125%; width:auto; aspect-ratio:18/11; bottom:0; }
+.illustrated .score { left:82%; top:8%; }
+.vehicle { display:block; width:100%; height:100%; filter:drop-shadow(0 6px 2px #12354b30); }
+.illustrated .lane { border-bottom:3px solid #fff8da; box-shadow:0 5px 0 #23566520; }
+.illustrated .finish { opacity:1; }
+.illustrated .pennant { background:linear-gradient(180deg,#ffffff30,transparent 45%,#00000018),var(--team); }
+.illustrated .backdrop { background:#bce9fa; }
+.yacht .backdrop { background:linear-gradient(#98e0ef,#d8f7ee); }
+.car .backdrop { background:linear-gradient(#9fcdda,#d8e5e4); }
+.motorbike .backdrop { background:linear-gradient(#dce4c0,#eff3df); }
+.penguin .backdrop { background:linear-gradient(#9bcfe5,#e6f9ff); }
+.balloon .backdrop { background:linear-gradient(#f7c3a8,#ffe7c7); }
+.spaceship .backdrop,.rocket .backdrop { background:radial-gradient(ellipse at 60% 30%,#4d4480,#172a4a 65%); }
+.spaceship .brand,.rocket .brand { color:#e4f5ff; text-shadow:none; }
+.spaceship .title h2,.rocket .title h2 { color:#c3efff; text-shadow:0 4px 0 #283151; -webkit-text-stroke:0; }
+.spaceship .lane { background:#ffffff05; }
+.yacht .dust { background:radial-gradient(ellipse,#e5ffff,transparent 65%); height:20%; bottom:0; }
+.car .dust,.motorbike .dust { background:radial-gradient(ellipse,#c3c4c4,transparent 65%); bottom:0; }
+.penguin .dust { background:radial-gradient(ellipse,white 10%,#c2e8f5 35%,transparent 65%); bottom:0; }
+.spaceship .dust { background:linear-gradient(90deg,transparent,#74eaff,#fff6c7); bottom:38%; height:16%; left:-25%; }
+.scene[data-moving='true'].illustrated .vehicle { animation:cruise .6s ease-in-out infinite alternate; }
+.scene[data-moving='true'].yacht .vehicle { animation:float 1s ease-in-out infinite alternate; }
+.scene[data-moving='true'].balloon .vehicle { animation:float 2s ease-in-out infinite alternate; }
+.vertical .racefield { top:30%; bottom:27%; left:6%; right:6%; grid-template-rows:none; grid-template-columns:repeat(var(--lanes),minmax(0,1fr)); gap:3%; }
+.vertical .lane { border-bottom:0; border-inline:1px dashed #ffffff80; }
+.vertical .pennant { position:absolute; top:100%; width:100%; padding:8px; border:2px solid white; border-radius:12px; clip-path:none; text-align:center; }
+.vertical .pennant small { display:none; }
+.vertical .runway { width:100%; }
+.vertical .runner { left:50%; transform:translateX(-50%); width:min(95%,220px); height:auto; transition:bottom .6s ease-out; }
+.vertical .score { left:50%; top:-24%; transform:translateX(-50%); }
+.vertical .finish { left:0; right:0; top:0; bottom:auto; width:100%; height:8px; transform:none; background-size:14px 14px; }
+.vertical .finish span { display:none; }
+.vertical .dust { left:42%; width:16%; height:38%; bottom:-30%; background:linear-gradient(#fff1ad,#f79441,transparent); }
+.balloon .dust { display:none; }
+.dragonboat .dust { background:radial-gradient(ellipse,#e5ffff,transparent 65%); height:20%; bottom:0; }
+.bicycle .dust { background:radial-gradient(ellipse,#eee3bf,transparent 65%); bottom:0; }
+.scene[data-moving='true'].dragonboat .vehicle { animation:float 1s ease-in-out infinite alternate; }
+.climb .dust { display:none; }
+.climb .lane { border-inline:0; }
+.tower { position:absolute; inset:0 16%; display:grid; grid-template-rows:repeat(8,1fr); gap:5px; padding:8px; border:4px solid #fff; border-radius:12px 12px 0 0; background:linear-gradient(90deg,#3c93b0,#76cee5 55%,#347b9a); box-shadow:6px 5px 0 #22547030; }
+.tower i { display:block; border:2px solid #f0faff; border-radius:3px; background:linear-gradient(120deg,#a2d7ed,#d6f5ff); }
+.tower i[data-lit='true'] { background:#ffdc68; box-shadow:0 0 12px #ffe681; }
+.climb .runner { z-index:1; }
+.climb .score { left:80%; top:0; }
+.scene[data-moving='true'].rocket .dust { animation:thrust .35s ease-in-out infinite alternate; }
+@keyframes thrust { from { opacity:.65; transform:scaleY(.8); } to { opacity:1; transform:scaleY(1.15); } }
+.vertical .join { top:33%; right:6%; }
+@keyframes cruise { to { transform:translateY(-3px); } }
+@keyframes float { to { transform:translateY(-5px) rotate(-2deg); } }
+@container (max-width:600px) {
+  .illustrated .runner { width:82px; height:auto; }
+  .illustrated .score { top:-22%; left:70%; }
+  .vertical .racefield { top:43%; bottom:31%; gap:2%; }
+  .vertical .runner { width:95%; }
+  .vertical .score { left:50%; top:-50%; }
+  .vertical .pennant { padding:5px 2px; }
+  .vertical .pennant strong { font-size:12px; }
+  .vertical .pennant span { font-size:9px; }
+}
+.sprintRace .runner { width:110px; height:135%; bottom:0; }
+.athlete { position:absolute; inset:0; display:block; filter:drop-shadow(0 5px 2px #492b3830); }
+.athlete img { object-fit:contain; }
+.sprintRace .score { left:88%; top:5%; }
+.scene[data-moving='true'].sprintRace .athlete { animation:sprintStride .24s ease-in-out infinite alternate; }
+@keyframes sprintStride { from { transform:translateY(0) rotate(-3deg); } to { transform:translateY(-7px) rotate(2deg); } }
+@container (max-width:600px) { .sprintRace .runner { width:58px; height:110%; } .sprintRace .score { left:75%; top:-18%; } }
+@media(prefers-reduced-motion:reduce) { .scene[data-moving='true'].sprintRace .athlete { animation:none; } }
