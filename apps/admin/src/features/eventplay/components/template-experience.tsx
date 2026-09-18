@@ -7,6 +7,7 @@ import PageContainer from '@/components/layout/page-container';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { configOf, templates } from '../api/service';
+import { creatorLink } from '../api/account';
 import { createTrialRoom, liveCommand, liveQuery } from '../api/realtime';
 import type { Template } from '../api/types';
 import { ClickArt, clickBackground } from './click-art';
@@ -143,9 +144,9 @@ export function TemplateExperience({ id }: { id: string }) {
       pageHeaderAction={
         <Button
           nativeButton={false}
-          render={<Link href={`/dashboard/activities/new?template=${id}`} />}
+          render={<Link href={creatorLink(id)} />}
         >
-          用此模板创建
+          制作同款 · 我的品牌游戏
         </Button>
       }
     >

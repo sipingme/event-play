@@ -9,11 +9,13 @@ import { useAppForm } from '@/lib/form';
 import { CLOUD_KEY, cloudToken, connectCloud, importLocalActivities, listManagedRooms, takeoverRoom } from '../api/service';
 import { ClientReady, PageError } from './shell';
 import { AgendaPanel } from './agenda';
+import { useAccount } from './account-boundary';
 
 export function CloudPage() {
   return <PageError><ClientReady><CloudView /></ClientReady></PageError>;
 }
 function CloudView() {
+  const account = useAccount();
   const [connected] = useState(() => !!cloudToken());
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -28,15 +30,15 @@ function CloudView() {
       await run(async () => { await connectCloud(value.token); window.location.reload(); });
     }
   });
-  return <PageContainer pageTitle='云工作区与房间' pageDescription='活动与联机轮次存储在服务器；使用管理密钥跨浏览器恢复。仍为受保护预览版，不是正式账号系统。'>
+  return <PageContainer pageTitle='云工作区与房间' pageDescription={account ? '登录即连接个人云空间，管理已发布作品的现场场次。' : '旧版密钥工作区保持可用；新作品建议通过账号创建。'}>
     <div className='mb-6 rounded-xl border bg-card p-6 space-y-4'>
       <h2 className='font-semibold'>{connected ? '已连接云工作区' : '当前使用本地活动'}</h2>
-      <p className='text-sm text-muted-foreground'>本地活动不会自动删除或上传。管理密钥能读取全部云活动并接管主持权限，请妥善保管，不要分享给玩家。品牌素材库和旧彩排报告仍保存在本机。</p>
+      <p className='text-sm text-muted-foreground'>{account ? `当前属于 ${account.email}。新作品和品牌自动保存到云端；旧本地演示不会自动导入。需要迁移时可主动导入本地草稿，导入后请检查并重新发布。` : '本地活动不会自动删除或上传。管理密钥能读取全部云活动并接管主持权限，请妥善保管，不要分享给玩家。'}</p>
       {notice && <p role='status' className='text-sm'>{notice}</p>}
       {connected ? <div className='flex flex-wrap gap-3'>
-        <Button disabled={busy} onClick={() => run(async () => { await navigator.clipboard.writeText(cloudToken()); setNotice('管理密钥已复制，请私下保存。'); })}>复制管理密钥（保密）</Button>
+        {!account && <Button disabled={busy} onClick={() => run(async () => { await navigator.clipboard.writeText(cloudToken()); setNotice('管理密钥已复制，请私下保存。'); })}>复制管理密钥（保密）</Button>}
         <Button variant='outline' disabled={busy} onClick={() => run(async () => { const count = await importLocalActivities(); await client.invalidateQueries(); setNotice(`已处理 ${count} 个本地活动，作为云端草稿导入；重复导入不会覆盖。请检查后重新发布。`); })}>导入本地活动为云端草稿</Button>
-        <Button variant='outline' disabled={busy} onClick={() => { if (window.confirm('请确认已备份管理密钥。断开后返回本地模式，不删除云端数据。')) { localStorage.removeItem(CLOUD_KEY); window.location.reload(); } }}>断开工作区</Button>
+        {!account && <Button variant='outline' disabled={busy} onClick={() => { if (window.confirm('请确认已备份管理密钥。断开后返回本地模式，不删除云端数据。')) { localStorage.removeItem(CLOUD_KEY); window.location.reload(); } }}>断开工作区</Button>}
         <Link href='/dashboard/activities' className='p-2 underline'>管理云活动 →</Link>
       </div> : <>
         <Button disabled={busy} onClick={() => run(async () => { await connectCloud(); window.location.reload(); })}>创建云工作区</Button>

@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { activityQuery, eventKeys, roomQuery, roomsQuery } from '../api/queries';
 import { cloudToken, commandRoom, publishDemo, validateConfig } from '../api/service';
-import { enterActivityRoom } from '../api/realtime';
+import { enterActivityRoom, createTrialRoom } from '../api/realtime';
 import type { DemoRoom } from '../api/types';
 import { Stage } from './stage';
 import { HostScreen } from './host';
@@ -30,11 +30,14 @@ export function Publish({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const errors = validateConfig(data);
-  async function run(action: 'publish' | 'room') {
+  async function run(action: 'publish' | 'room' | 'trial') {
     setBusy(true);
     setError('');
     try {
-      if (action === 'publish') {
+      if (action === 'trial') {
+        const room = await createTrialRoom(data);
+        router.push(`/live/host/${room.id}`);
+      } else if (action === 'publish') {
         await publishDemo(id);
         await client.invalidateQueries({ queryKey: eventKeys.all });
         toast.success(cloudToken() ? '云端活动版本已发布' : '已保存本地活动版本');
@@ -51,8 +54,8 @@ export function Publish({ id }: { id: string }) {
   }
   return (
     <PageContainer
-      pageTitle='发布与入场'
-      pageDescription='保存活动版本，进入联机主持端，分享二维码让玩家加入。'
+      pageTitle='试玩与发布'
+      pageDescription='先用独立测试场次验证效果，再发布私有版本并开场。发布不会把作品上架到公共体验库。'
       pageHeaderAction={
         <Button
           nativeButton={false}
@@ -74,7 +77,7 @@ export function Publish({ id }: { id: string }) {
               <span className='text-muted-foreground'>活动时长</span>
               <span>{data.duration} 秒</span>
               <span className='text-muted-foreground'>当前版本</span>
-              <span>{data.release ? `演示 v${data.release.version}` : '尚未保存版本'}</span>
+              <span>{data.release ? `已发布 v${data.release.version}` : '尚未发布'}</span>
             </div>
             <div className='space-y-3 border-t pt-4'>
               {['活动名称与规则', '队伍与人数配置', '预览资源'].map((text) => (
@@ -94,12 +97,13 @@ export function Publish({ id }: { id: string }) {
                 {error}
               </p>
             )}
+            <Button className='w-full' variant='outline' disabled={busy || errors.length > 0} onClick={() => run('trial')}>试玩当前草稿 · 独立测试场次</Button>
             <Button
               className='w-full'
               disabled={busy || errors.length > 0}
               onClick={() => run('publish')}
             >
-              保存并发布活动版本
+              发布私有作品版本
             </Button>
             <Button
               className='w-full'
@@ -114,10 +118,10 @@ export function Publish({ id }: { id: string }) {
       </div>
       <div className='mt-5 rounded-xl border border-dashed p-5'>
         <h3 className='flex items-center gap-2 font-medium'>
-          <Icons.lock className='size-4' /> 正式发布尚未启用
+          <Icons.lock className='size-4' /> 私有发布与版本隔离
         </h3>
         <p className='mt-2 text-sm leading-6 text-muted-foreground'>
-          {cloudToken() ? '当前活动保存到云工作区，可跨浏览器恢复。' : '当前活动配置保存在本机，可从云工作区页面主动导入。'}联机主持端支持 H5 玩家扫码加入；正式账号、微信身份及奖品服务尚未接入。
+          {cloudToken() ? '当前作品保存到云工作区。' : '当前配置仍保存在本机。'}发布会冻结配置，正在进行的场次不受后续草稿修改影响。试玩场次不计入正式场次历史；主持人可分享 H5 玩家入口。公开模板上架、微信身份及真实奖品发放尚未开放。
         </p>
       </div>
     </PageContainer>

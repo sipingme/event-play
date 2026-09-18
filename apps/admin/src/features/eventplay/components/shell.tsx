@@ -6,6 +6,8 @@ import { useTheme } from 'next-themes';
 import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { AccountBoundary, useAccount } from './account-boundary';
+import { logoutAccount } from '../api/account';
 import {
   Sidebar,
   SidebarContent,
@@ -74,6 +76,10 @@ export function ClientReady({ children }: { children: ReactNode }) {
   );
 }
 export function EventShell({ children }: { children: ReactNode }) {
+  return <AccountBoundary><WorkspaceShell>{children}</WorkspaceShell></AccountBoundary>;
+}
+function WorkspaceShell({ children }: { children: ReactNode }) {
+  const account = useAccount();
   const pathname = usePathname();
   const { resolvedTheme, setTheme } = useTheme();
   const current = links.find(
@@ -139,9 +145,9 @@ export function EventShell({ children }: { children: ReactNode }) {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton render={<Link href='/login' aria-label='返回登录' />}>
+              <SidebarMenuButton onClick={() => { if (account) { void logoutAccount().catch((error: Error) => window.alert(error.message)); } else { window.location.assign('/login'); } }}>
                 <Icons.logout />
-                <span>退出演示</span>
+                <span>{account ? '退出登录' : '登录 / 注册'}</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
@@ -150,8 +156,8 @@ export function EventShell({ children }: { children: ReactNode }) {
               EP
             </span>
             <div>
-              <p className='text-sm'>体验工作区</p>
-              <p className='text-xs text-muted-foreground'>预览版 · 支持云工作区</p>
+              <p className='max-w-44 truncate text-sm'>{account?.email ?? '体验工作区'}</p>
+              <p className='text-xs text-muted-foreground'>{account ? '个人云空间 · 私有作品' : '无需账号，先体验游戏'}</p>
             </div>
           </div>
         </SidebarFooter>
@@ -163,7 +169,7 @@ export function EventShell({ children }: { children: ReactNode }) {
           <Icons.chevronRight className='size-3 text-muted-foreground' />
           <span className='text-sm'>{current?.name ?? '活动配置'}</span>
           <div className='ml-auto flex items-center gap-3'>
-            <Badge variant='outline'>前端演示</Badge>
+            <Badge variant='outline'>{account ? '个人工作空间' : '演示体验'}</Badge>
             <Button
               variant='ghost'
               size='icon'
@@ -175,7 +181,7 @@ export function EventShell({ children }: { children: ReactNode }) {
           </div>
         </header>
         <div className='border-b bg-muted/50 px-4 py-2 text-xs leading-5 text-muted-foreground md:px-6'>
-          预览版：未连接云工作区时，活动保存在本机；连接后保存至后端。支持 H5 联机，正式账号、微信登录与 AI 尚未接入。
+          {account ? '你的作品和品牌保存到个人云空间。发布仅供自己开场使用，不会公开上架；编辑草稿不影响已开场的版本。' : '先体验效果，再点击「制作同款」创建你的品牌游戏。登录后保存到个人云空间，旧演示与旧密钥工作区保持独立。'}
         </div>
         <main className='min-w-0 flex-1 py-5'>
           <PageError key={pathname}>

@@ -16,6 +16,7 @@ import { ReactionPanel } from './reaction-panel';
 import { MoneyArena } from './money-scene';
 export function Stage({
   config,
+  racers,
   scores = [78, 65, 52],
   remaining,
   compact = false,
@@ -27,6 +28,7 @@ export function Stage({
   connected
 }: {
   config: GameConfig;
+  racers?: {id: string; name: string; score: number}[];
   scores?: number[];
   remaining?: number;
   compact?: boolean;
@@ -46,7 +48,7 @@ export function Stage({
   if (['catch'].includes(config.mechanic)) return <ControlPanel connected={connected??true} room={{id:live?'stage':'preview',config,scores,remaining:remaining??config.duration,state:phase,countdown,revision:0,blackout:false,log:[],players:[],game:{type:'catch',lane:1,index:0,progress:.4}}}/>;
   if (['reaction'].includes(config.mechanic)) return <ReactionPanel connected={connected??true} room={{id:live?'stage':'preview', config, scores, remaining:remaining??config.duration, state:phase, countdown, revision:0,blackout:false,log:[],players:[],game:{type:'reaction',cell:4,index:0}}}/>;
   if (config.clickVariant) return <ClickArena config={config} scores={scores} remaining={remaining} compact={compact} live={live} phase={phase} countdown={countdown} playerCount={playerCount} playerUrl={playerUrl} connected={connected} />;
-  if (['race', 'alternating'].includes(config.mechanic)) return <RaceArena config={config} scores={scores} remaining={remaining} compact={compact} live={live} phase={phase} countdown={countdown} playerCount={playerCount} playerUrl={playerUrl} connected={connected} />;
+  if (['race', 'alternating'].includes(config.mechanic)) return <RaceArena config={config} racers={racers} scores={scores} remaining={remaining} compact={compact} live={live} phase={phase} countdown={countdown} playerCount={playerCount} playerUrl={playerUrl} connected={connected} />;
   if (config.mechanic === 'money') return <MoneyArena config={config} scores={scores} remaining={remaining} compact={compact} live={live} phase={phase} countdown={countdown} playerCount={playerCount} playerUrl={playerUrl} connected={connected} />;
   const teams = config.teams
     .split(/[,，]/)

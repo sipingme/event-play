@@ -15,6 +15,11 @@ export interface PublicEvent {
   finished: boolean;
 }
 export interface GameConfig {
+  participationMode?: 'team' | 'individual';
+  teamAssignment?: 'choose' | 'balanced';
+  raceBackdrop?: 'day' | 'sunset' | 'night';
+  raceHorse?: 'team' | 'red' | 'blue' | 'green' | 'purple';
+  storyboard?: import('./storyboard').Storyboard | null;
   socialVariant?:import('./social-games').SocialVariant;
   createVariant?: import('./create-games').CreateVariant;
   createImage?:string;

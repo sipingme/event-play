@@ -157,6 +157,7 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
     }
   }
   const teams = data.config.teams.split(',');
+  const individual = data.config.participationMode === 'individual';
   const player = data.players.find((p) => p.id === session?.playerId);
   const ended = data.state === 'completed' || data.state === 'aborted';
   const special = ['quiz', 'draw', 'catch', 'reaction', 'wall', 'vote', 'create', 'social'].includes(data.config.mechanic);
@@ -216,7 +217,7 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
   );
   const stage = (
     <div className='relative overflow-hidden'>
-      {special ? <GamePanel room={data} connected={connected} /> : <Stage config={data.config} scores={data.scores} remaining={data.remaining} live phase={data.state} countdown={data.countdown} playerCount={data.playerCount ?? data.players.length} playerUrl={mode === 'screen' ? playerUrl : undefined} connected={connected && !data.blackout} />}
+      {special ? <GamePanel room={data} connected={connected} /> : <Stage config={data.config} racers={data.leaderboard} scores={data.scores} remaining={data.remaining} live phase={data.state} countdown={data.countdown} playerCount={data.playerCount ?? data.players.length} playerUrl={mode === 'screen' ? playerUrl : undefined} connected={connected && !data.blackout} />}
       {(data.blackout || (!special && data.config.mechanic !== 'race' && data.state !== 'running')) && (
         <div className='absolute inset-0 flex items-center justify-center bg-black/65 text-center text-white'>
           <div>
@@ -243,7 +244,7 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
         <ScreenPresentation room={data} connected={connected} />
         {stage}
         {!['race', 'draw', 'social'].includes(data.config.mechanic) && <div className='mt-5 grid grid-cols-2 gap-3 md:grid-cols-4'>
-          {teams.map((name, i) => (
+          {(!individual ? teams : []).map((name, i) => (
             <div key={name} className='rounded-xl border p-5 text-xl'>
               {name}
               <strong className='float-right'>{data.scores[i]}</strong>
@@ -259,7 +260,7 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
   if (mode === 'play')
     return (
       <main className='mx-auto min-h-screen max-w-md bg-background px-5 py-8'>
-        <p className='mb-4 text-sm font-semibold'>EventPlay · 一起为团队加速</p>
+        <p className='mb-4 text-sm font-semibold'>EventPlay · {individual ? '个人竞速赛' : '一起为团队加速'}</p>
         <h1 className='mb-3 text-2xl font-semibold'>{data.config.name}</h1>
         <p className='mb-3 break-all text-xs text-muted-foreground'>房间：{id}</p>
         {status}
@@ -282,14 +283,16 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
             <form.AppField name='name'>
               {(field) => <field.TextField label='测试昵称' required maxLength={16} />}
             </form.AppField>
-            <form.AppField name='team'>
+            {!individual && data.config.teamAssignment !== 'balanced' && <form.AppField name='team'>
               {(field) => (
                 <field.SelectField
                   label='加入战队'
-                  options={teams.map((name, i) => ({ label: name, value: String(i) }))}
+                  options={(!individual ? teams : []).map((name, i) => ({ label: name, value: String(i) }))}
                 />
               )}
-            </form.AppField>
+            </form.AppField>}
+            {individual && <p className='text-sm'>个人赛：独立计分，无需选择战队。</p>}
+            {!individual && data.config.teamAssignment === 'balanced' && <p className='text-sm'>系统将在入场时自动均衡分队。</p>}
             <form.Subscribe selector={(s) => s.isSubmitting}>
               {(pending) => (
                 <Button
@@ -305,14 +308,14 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
           </form>
         ) : (
           <>
-            {data.state === 'waiting' && !['wall','create','social'].includes(data.config.mechanic) && <div role='status' className='mb-5 rounded-xl border bg-muted p-5'><strong>已成功入场，请等待主持人开始</strong><p className='mt-2 text-sm'>无需重复加入。你的队伍：{player ? teams[player.team] : '正在同步'}。如长时间未开场，请向主持人确认房间 ID：{id}。</p></div>}
+            {data.state === 'waiting' && !['wall','create','social'].includes(data.config.mechanic) && <div role='status' className='mb-5 rounded-xl border bg-muted p-5'><strong>已成功入场，请等待主持人开始</strong><p className='mt-2 text-sm'>无需重复加入。{individual ? '个人赛：独立计分' : `你的队伍：${player ? teams[player.team] : '正在同步'}`}。如长时间未开场，请向主持人确认房间 ID：{id}。</p></div>}
             <div className='rounded-2xl border p-5'>
               <p>
-                {player?.name || '正在恢复身份…'} · {player ? teams[player.team] : ''}
+                {player?.name || '正在恢复身份…'} · {individual ? `全场排名：${player?.rank ?? '—'}（同分并列）` : player ? teams[player.team] : ''}
               </p>
               <div className='mt-5 flex justify-between'>
                 <div>
-                  <p className='text-xs text-muted-foreground'>{['create','social'].includes(data.config.mechanic)?'参与状态':data.config.mechanic==='vote'?'当前轮次':data.config.mechanic==='wall'?'签到状态':'我的贡献'}</p>
+                  <p className='text-xs text-muted-foreground'>{['create','social'].includes(data.config.mechanic)?'参与状态':data.config.mechanic==='vote'?'当前轮次':data.config.mechanic==='wall'?'签到状态':individual ? '我的积分' : '我的贡献'}</p>
                   <strong className='text-4xl'>{['create','social'].includes(data.config.mechanic)?'已加入':data.config.mechanic==='vote'?`第 ${(data.game?.round??0)+1} 轮`:data.config.mechanic==='wall'?'已签到':player?.score ?? 0}</strong>
                 </div>
                 <div>
@@ -358,7 +361,7 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
           <Link href='/dashboard/cloud' className='p-2 underline'>返回整场编排 / 下一环节</Link>
           {!data.agendaId && <Button disabled={busy || !hasOwner} onClick={async () => { setBusy(true); setError(''); try { const room = await rematchLiveRoom(id); router.push(`/live/host/${room.id}`); } catch (e) { setError((e as Error).message); } finally { setBusy(false); } }}>相同规则再来一局</Button>}
           <Button variant='outline' onClick={() => {
-            const content = JSON.stringify({ roomId: id, name: data.config.name, state: data.state, game: data.game, teams: teams.map((name, i) => ({ name, score: data.scores[i] })), players: ranking, exportedAt: new Date().toISOString() }, null, 2);
+            const content = JSON.stringify({ roomId: id, name: data.config.name, state: data.state, game: data.game, participationMode: data.config.participationMode ?? 'team', teams: (individual ? [] : teams).map((name, i) => ({ name, score: data.scores[i] })), players: ranking, exportedAt: new Date().toISOString() }, null, 2);
             const url = URL.createObjectURL(new Blob([content], { type: 'application/json' }));
             const a = document.createElement('a'); a.href = url; a.download = `eventplay-result-${id}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
           }}>导出本局成绩 JSON</Button>
@@ -501,8 +504,8 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
         <div className='mt-5 grid gap-5 md:grid-cols-2'>
           <Card>
             <CardContent>
-              <h2 className='mb-4 font-semibold'>{data.config.mechanic==='social'?'营地参与':'战队成绩'}</h2>
-              {teams.map((name, i) => (
+              <h2 className='mb-4 font-semibold'>{individual ? '个人赛成绩' : data.config.mechanic==='social'?'营地参与':'战队成绩'}</h2>
+              {(!individual ? teams : []).map((name, i) => (
                 <div key={name} className='flex justify-between border-t py-3'>
                   <span>{name}</span>
                   <strong>{data.config.mechanic==='social'?(data.game?.social?.groups[i]?.members??0)+' 人':data.scores[i]+' 分'}</strong>
@@ -512,7 +515,7 @@ function LiveView({ id, mode }: { id: string; mode: 'host' | 'play' | 'screen' }
               {ranking.slice(0, 20).map((p) => (
                 <div key={p.id} className='flex justify-between border-t py-2 text-sm'>
                   <span>
-                    {p.name}{data.config.mechanic!=='social'&&<> · {teams[p.team]}</>}
+                    {p.name}{data.config.mechanic!=='social'&&!individual&&<> · {teams[p.team]}</>}
                   </span>
                   {data.config.mechanic!=='social'&&<span>{p.score}</span>}
                 </div>

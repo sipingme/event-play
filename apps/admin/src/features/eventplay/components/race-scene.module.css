@@ -1,5 +1,15 @@
 .scene { position:relative; isolation:isolate; width:100%; aspect-ratio:16/9; min-height:540px; overflow:hidden; container-type:inline-size; color:#204a58; background:#c3edf1; font-family:Arial,'Microsoft YaHei',sans-serif; }
 .backdrop { position:absolute; inset:0; z-index:-2; background:url('/games/race/stadium-cartoon-v2.png') center/100% 100%; }
+.packfield { position:absolute; top:32%; bottom:19%; left:2%; right:7%; }
+.packRunner { position:absolute; width:clamp(64px,9cqw,170px); aspect-ratio:3/4; transition:left .65s ease-out; pointer-events:none; }
+.packBody { position:absolute; inset:0; }
+.packName { position:absolute; top:29%; left:50%; transform:translateX(-50%); white-space:nowrap; color:#fff; background:var(--team); border:1px solid #fff; border-radius:10px; padding:2px 6px; font-size:clamp(10px,1.05cqw,20px); font-weight:800; text-shadow:0 1px 2px #0008; }
+.scene[data-moving='true'] .packBody { animation:packWeave var(--pace) ease-in-out infinite alternate; animation-delay:var(--offset); }
+.scene:not([data-moving='true']) .packBody { animation-play-state:paused; }
+.packEmpty { text-align:center; padding-top:10%; font-size:clamp(16px,2cqw,32px); }
+.packStandings { max-height:24cqw; overflow:auto; }
+@keyframes packWeave { from { transform:translateY(calc(-1 * var(--weave))); } to { transform:translateY(var(--weave)); } }
+@media (prefers-reduced-motion:reduce) { .scene[data-moving='true'] .packBody,.scene[data-moving='true'] .packBody .horse { animation:none; } }
 .header { display:grid; grid-template-columns:1fr 3fr 1fr; align-items:start; gap:2%; padding:2.2% 3%; }
 .brand { display:flex; align-items:center; gap:10px; padding-top:8px; font-size:clamp(12px,1.5cqw,24px); font-weight:800; color:#205062; text-shadow:0 1px 0 #fff; overflow-wrap:anywhere; }
 .brand img { object-fit:contain; max-width:40%; }

@@ -8,6 +8,69 @@ CONFIG = dict(name='测试赛马', mechanic='race', theme='gold', duration=30, p
 
 
 class RealtimeTests(unittest.TestCase):
+    def test_individual_twenty_capacity_and_all_screen_players(self):
+        self.assertEqual(self.client.post('/rooms', json={**CONFIG, 'participationMode':'individual', 'participants':21}).status_code, 422)
+        created = self.client.post('/rooms', json={**CONFIG, 'participationMode':'individual', 'participants':20}).json()
+        rid = created['room']['id']
+        joined = []
+        for i in range(20):
+            response = self.client.post(f'/rooms/{rid}/join', json={'name':f'玩家{i}', 'team':0})
+            self.assertEqual(response.status_code, 200)
+            joined.append(response.json())
+        self.assertEqual(self.client.post(f'/rooms/{rid}/join', json={'name':'第21人', 'team':0}).status_code, 409)
+        restored = self.client.post(f'/rooms/{rid}/join', json={'name':'恢复', 'team':0, 'guestToken':joined[0]['guestToken']})
+        self.assertEqual(restored.status_code, 200)
+        with self.client.websocket_connect(f'/rooms/{rid}/stream?view=screen') as ws:
+            snapshot = ws.receive_json()
+            self.assertEqual(len(snapshot['leaderboard']), 20)
+            self.assertEqual({p['id'] for p in snapshot['leaderboard']}, {p['playerId'] for p in joined})
+            self.assertEqual(snapshot['playerCount'], 20)
+        self.assertEqual(self.client.post('/rooms', json={**CONFIG,'participants':50}).status_code, 200)
+
+    def test_individual_scores_ranks_streams_and_rematch(self):
+        created = self.client.post('/rooms', json={**CONFIG, 'participationMode': 'individual'}).json()
+        rid = created['room']['id']
+        host = {'Authorization': 'Bearer ' + created['token']}
+        players = [self.client.post(f'/rooms/{rid}/join', json={'name': f'玩家{i}', 'team': 3}).json() for i in range(8)]
+        self.client.post(f'/rooms/{rid}/command', json={'action':'start'}, headers=host)
+        for i, player in enumerate(players):
+            for seq in range(1, (2 if i < 2 else 1) + 1):
+                result = self.client.post(f'/rooms/{rid}/tap', json={'seq':seq}, headers={'Authorization':'Bearer '+player['token']})
+                self.assertTrue(result.json()['accepted'])
+        room = self.client.get(f'/rooms/{rid}').json()
+        self.assertEqual(room['scores'], [0, 0])
+        self.assertEqual(len(room['leaderboard']), 8)
+        self.assertEqual([p['rank'] for p in room['players']], [1, 1, 3, 3, 3, 3, 3, 3])
+        with self.client.websocket_connect(f'/rooms/{rid}/stream?view=player') as ws:
+            ws.send_json({'token':players[-1]['token']})
+            own = ws.receive_json()
+            self.assertEqual(len(own['players']), 1)
+            self.assertEqual(own['players'][0]['rank'], 3)
+            self.assertEqual(len(own['leaderboard']), 8)
+            self.assertNotIn('token', str(own))
+        with self.client.websocket_connect(f'/rooms/{rid}/stream?view=screen') as ws:
+            screen = ws.receive_json()
+            self.assertEqual(screen['players'], [])
+            self.assertEqual(len(screen['leaderboard']), 8)
+        self.client.post(f'/rooms/{rid}/command', json={'action':'finish'}, headers=host)
+        final = self.client.get(f'/rooms/{rid}').json()
+        self.assertEqual(final['state'], 'completed')
+        self.assertEqual(final['leaderboard'], room['leaderboard'])
+        again = self.client.post(f'/rooms/{rid}/rematch', headers=host).json()
+        self.assertEqual(again['config']['participationMode'], 'individual')
+
+    def test_balanced_team_assignment_and_rejoin_stability(self):
+        created = self.client.post('/rooms', json={**CONFIG, 'teamAssignment':'balanced'}).json()
+        rid = created['room']['id']
+        players = [self.client.post(f'/rooms/{rid}/join', json={'name':f'玩家{i}', 'team':0}).json() for i in range(5)]
+        room = self.client.get(f'/rooms/{rid}').json()
+        self.assertEqual([p['team'] for p in room['players']], [0,1,0,1,0])
+        restored = self.client.post(f'/rooms/{rid}/join', json={'name':'重新入场','team':0,'guestToken':players[1]['guestToken']}).json()
+        self.assertEqual(restored['playerId'], players[1]['playerId'])
+        room = self.client.get(f'/rooms/{rid}').json()
+        self.assertEqual(len(room['players']), 5)
+        self.assertEqual(next(p for p in room['players'] if p['id'] == restored['playerId'])['team'], 1)
+
     def test_click_templates_validation_scoring_and_completion(self):
         for variant in ['tug','boss','balloon','rocket','flower','tower','brand','popcorn']:
             coop = variant in ['boss','rocket','flower','brand']

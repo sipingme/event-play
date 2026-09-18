@@ -23,9 +23,16 @@ import wall_rules
 import vote_rules
 import create_rules
 import social_rules
+import accounts as account_service
+from storyboard import Storyboard
 
 
 class Config(BaseModel):
+    participationMode: Literal['team', 'individual'] = 'team'
+    teamAssignment: Literal['choose', 'balanced'] = 'choose'
+    raceBackdrop: Literal['day', 'sunset', 'night'] = 'day'
+    raceHorse: Literal['team', 'red', 'blue', 'green', 'purple'] = 'team'
+    storyboard: Storyboard | None = None
     socialVariant: Literal['team','interest','match','same','bingo','truth','cards','story','praise'] | None = None
     createVariant: Literal['puzzle','tree','map','draw','stars','city','flowers','scroll','fireworks'] | None = None
     createImage: str = Field(default='/games/click/garden-bg-v1.png',max_length=300)
@@ -62,6 +69,12 @@ class Config(BaseModel):
 
     @model_validator(mode='after')
     def validate_teams(self):
+        if self.participationMode == 'individual' and self.participants > 20:
+            raise ValueError('个人赛最多支持20人')
+        if self.participationMode == 'individual' and (self.mechanic != 'race' or self.clickVariant):
+            raise ValueError('个人赛目前仅支持竞速游戏')
+        if self.storyboard and (self.mechanic != 'race' or self.clickVariant):
+            raise ValueError('故事板第一版仅支持竞速游戏')
         if self.socialVariant and self.mechanic!='social':raise ValueError('破冰场景与玩法不匹配')
         if self.createVariant and self.mechanic!='create':raise ValueError('共创场景与玩法不匹配')
         if self.mechanic=='create' and (not self.createImage.startswith('/games/') or '..' in self.createImage or any(c in self.createImage for c in '?#')):raise ValueError('共创图片须为 /games/ 本地路径')
@@ -254,6 +267,11 @@ class Engine:
         return room
 
     def public(self, room):
+        ordered = sorted(room['players'].values(), key=lambda p: (-p['score'], p['id']))
+        ranks = {}
+        for i, p in enumerate(ordered):
+            ranks.setdefault(p['score'], i + 1)
+        leaderboard = [dict(id=p['id'], name=p['name'], score=p['score'], rank=ranks[p['score']]) for p in ordered[:20 if room['config'].get('participationMode') == 'individual' else 6]]
         config = {k: v for k, v in room['config'].items() if k != 'quizText'}
         active = self.presence.get(room['id'], {})
         now = time.monotonic()
@@ -261,8 +279,8 @@ class Engine:
         self.presence[room['id']] = active
         online = sum(key.startswith('player:') for key in active)
         presence = dict(online=online, offline=max(0, len(room['players'])-online), screens=sum(key.startswith('screen:') for key in active))
-        return {**{k: room[k] for k in ['id', 'state', 'remaining', 'scores', 'revision', 'blackout', 'log']}, 'trial': bool(room.get('trialExpiresAt')), 'presence': presence, 'countdown': room.get('countdown', 0), 'agendaId': room.get('agendaId'), 'config': config, 'game': game_rules.public_game(room),
-                'players': [{'id': p['id'], 'name': p['name'], 'team': p['team'], 'score': p['score'], 'control': p.get('control'), 'lane': p.get('lane', 1), 'answered': [int(k) for k in p.get('answers', {})]} for p in room['players'].values()]}
+        return {**{k: room[k] for k in ['id', 'state', 'remaining', 'scores', 'revision', 'blackout', 'log']}, 'leaderboard': leaderboard, 'trial': bool(room.get('trialExpiresAt')), 'presence': presence, 'countdown': room.get('countdown', 0), 'agendaId': room.get('agendaId'), 'config': config, 'game': game_rules.public_game(room),
+                'players': [{'id': p['id'], 'name': p['name'], 'team': p['team'], 'score': p['score'], 'rank': ranks[p['score']], 'control': p.get('control'), 'lane': p.get('lane', 1), 'answered': [int(k) for k in p.get('answers', {})]} for p in room['players'].values()]}
 
     def owner(self, room, token):
         if not token or not secrets.compare_digest(room['owner'], digest(token)):
@@ -285,14 +303,15 @@ class Engine:
         if (room['state'] != 'waiting' and not (room['config']['mechanic'] in ('wall','create','social') and room['state']=='running')) or room.get('startsAt'):
             raise HTTPException(409, '已开局，不能新加入；已加入玩家可刷新恢复')
         name = data.name.strip()
-        if not name or data.team >= len(room['scores']):
+        if not name or (room['config'].get('participationMode') != 'individual' and room['config'].get('teamAssignment') != 'balanced' and data.team >= len(room['scores'])):
             raise HTTPException(422, '昵称或队伍无效')
         guest = data.guestToken or secrets.token_urlsafe(32)
         identity = digest(guest)
         if data.guestToken and not self.db.execute('SELECT 1 FROM guests WHERE identity=?', (identity,)).fetchone():
             raise HTTPException(403, '游客身份已失效，请清除本站玩家身份后重新入场')
         existing = next(((key, p) for key, p in room['players'].items() if p.get('identity') == identity), None)
-        if not existing and len(room['players']) >= room['config']['participants']:
+        capacity = min(20, room['config']['participants']) if room['config'].get('participationMode') == 'individual' else room['config']['participants']
+        if not existing and len(room['players']) >= capacity:
             raise HTTPException(409, '房间人数已满')
         token, pid = secrets.token_urlsafe(32), secrets.token_urlsafe(8)
         self.db.execute('INSERT OR IGNORE INTO guests VALUES (?)', (identity,))
@@ -303,7 +322,12 @@ class Engine:
             room['players'][digest(token)] = player
             pid = player['id']
         else:
-            room['players'][digest(token)] = dict(identity=identity, id=pid, name=name, team=data.team, score=0, seq=0, bucket=10.0, refill=time.time())
+            team = data.team
+            if room['config'].get('participationMode') == 'individual':
+                team = 0
+            elif room['config'].get('teamAssignment') == 'balanced':
+                team = min(range(len(room['scores'])), key=lambda i: sum(p['team'] == i for p in room['players'].values()))
+            room['players'][digest(token)] = dict(identity=identity, id=pid, name=name, team=team, score=0, seq=0, bucket=10.0, refill=time.time())
         self.save(room)
         return {'token': token, 'playerId': pid, 'guestToken': guest}
 
@@ -337,7 +361,8 @@ class Engine:
         if accepted:
             player['bucket'] -= 1
             player['score'] += 1
-            room['scores'][player['team']] += 1
+            if room['config'].get('participationMode') != 'individual':
+                room['scores'][player['team']] += 1
             if alternating:
                 player['lastSide'] = side
             if mechanic == 'light' and sum(room['scores']) >= room['config'].get('goal', 1000):
@@ -463,6 +488,7 @@ def create_app(path=None):
     app = FastAPI(title='EventPlay local realtime MVP', lifespan=lifespan)
     app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=['GET', 'POST'], allow_headers=['Content-Type', 'Authorization'])
     app.state.engine = engine
+    accounts = account_service.install(app, engine.db, lock)
 
     @app.get('/health')
     async def health():
@@ -499,6 +525,8 @@ def create_app(path=None):
 
     def workspace(value):
         token = bearer(value)
+        if token.startswith('ep_session_'):
+            return accounts.workspace(token)
         key = digest(token)
         if not token or not engine.db.execute('SELECT 1 FROM workspaces WHERE owner=?', (key,)).fetchone():
             raise HTTPException(403, '请连接云工作区；管理密钥无效')
@@ -563,6 +591,10 @@ def create_app(path=None):
     async def publish_activity(aid: str, data: Revision, authorization: str = Header(default='')):
         async with lock:
             item = activity(aid, workspace(authorization))
+            if item.get('storyboard'):
+                error = Storyboard.model_validate(item['storyboard']).publish_error()
+                if error:
+                    raise HTTPException(422, error)
             if item['revision'] != data.revision:
                 raise HTTPException(409, '活动已被修改，请刷新后重试')
             item['release'] = dict(version=item.get('release', {}).get('version', 0) + 1, config=Config.model_validate(item).model_dump(), createdAt=stamp())

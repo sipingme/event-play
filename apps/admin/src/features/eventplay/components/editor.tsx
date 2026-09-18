@@ -25,14 +25,18 @@ import {
 import type { Activity, GameConfig } from '../api/types';
 import { clickGames } from '../api/click-games';
 import { Stage } from './stage';
+import { RaceCreator } from './race-creator';
+import { StoryboardEditor } from './storyboard-editor';
+import { defaultStoryboard } from '../api/storyboard';
 
 export function NewActivity() {
   const search = useSearchParams();
   const { data: brand } = useSuspenseQuery(brandQuery());
-  const template = templates.find((t) => t.id === search.get('template')) ?? templates[0];
+  const template = templates.find((t) => t.id === search.get('template')) ?? templates.find((t) => t.id === 'shake-race')!;
   return (
     <Editor
       initial={{
+        ...configOf({ ...template, participants: 200, brand: brand.name, logo: brand.logo }),
         name: template.name,
         description: search.get('prompt') ?? template.description,
         mechanic: template.mechanic,
@@ -58,6 +62,10 @@ export function EditActivity({ id }: { id: string }) {
   return <Editor key={id} initial={configOf(data)} activity={data} />;
 }
 function Editor({ initial, activity }: { initial: GameConfig; activity?: Activity }) {
+  if (initial.mechanic === 'race' && !initial.clickVariant && (initial.raceVariant ?? 'horse') === 'horse') return <RaceCreator initial={initial} activity={activity} />;
+  return <ClassicEditor initial={initial} activity={activity} />;
+}
+function ClassicEditor({ initial, activity }: { initial: GameConfig; activity?: Activity }) {
   const router = useRouter();
   const client = useQueryClient();
   const [revision, setRevision] = useState(activity?.revision ?? 0);
@@ -66,8 +74,9 @@ function Editor({ initial, activity }: { initial: GameConfig; activity?: Activit
   const [previous, setPrevious] = useState<GameConfig | null>(null);
   const [savedAt, setSavedAt] = useState('');
   const form = useAppForm({
-    defaultValues: { ...initial, voteChange:initial.voteChange??false,voteLive:initial.voteLive??true, drawRepeat: initial.drawRepeat??false, goal: initial.goal ?? 1000, quizText: initial.quizText ?? DEFAULT_QUIZ, winnerCount: initial.winnerCount ?? 1, prizeName: initial.prizeName ?? '幸运奖', catchDifficulty: initial.catchDifficulty ?? 'normal' } as GameConfig,
+    defaultValues: { ...initial, storyboard: initial.storyboard ?? (initial.mechanic === 'race' && !initial.clickVariant && (initial.raceVariant ?? 'horse') === 'horse' ? defaultStoryboard() : null), voteChange:initial.voteChange??false,voteLive:initial.voteLive??true, drawRepeat: initial.drawRepeat??false, goal: initial.goal ?? 1000, quizText: initial.quizText ?? DEFAULT_QUIZ, winnerCount: initial.winnerCount ?? 1, prizeName: initial.prizeName ?? '幸运奖', catchDifficulty: initial.catchDifficulty ?? 'normal' } as GameConfig,
     onSubmit: async ({ value }) => {
+      value = { ...value, storyboard: value.mechanic === 'race' && !value.clickVariant && (value.raceVariant ?? 'horse') === 'horse' ? value.storyboard : null };
       setNotice('');
       try {
         const errors = validateConfig(value);
@@ -125,8 +134,8 @@ function Editor({ initial, activity }: { initial: GameConfig; activity?: Activit
   }
   return (
     <PageContainer
-      pageTitle={activity ? '活动编辑器' : '创建一场新活动'}
-      pageDescription='配置你的玩法，在预览中看到变化。'
+      pageTitle={activity ? '我的游戏 · 编辑草稿' : '制作同款 · 我的品牌游戏'}
+      pageDescription='选择范例 → 定制品牌与规则 → 保存草稿 → 试玩并发布。作品默认私有，不会公开上架。'
       pageHeaderAction={
         <div className='flex gap-2'>
           <Button
@@ -278,7 +287,7 @@ function Editor({ initial, activity }: { initial: GameConfig; activity?: Activit
             <Badge variant='outline'>示意渲染 · 非 PixiJS 引擎</Badge>
           </div>
           <form.Subscribe selector={(s) => s.values}>
-            {(value) => <Stage config={value} />}
+            {(value) => value.mechanic === 'race' && !value.clickVariant && (value.raceVariant ?? 'horse') === 'horse' ? <StoryboardEditor config={value} board={value.storyboard ?? defaultStoryboard()} onChange={(board) => form.setFieldValue('storyboard', board)} /> : <Stage config={value} />}
           </form.Subscribe>
           <Card className='shadow-none'>
             <CardContent>
@@ -325,7 +334,7 @@ function Editor({ initial, activity }: { initial: GameConfig; activity?: Activit
           </Card>
           <div className='grid gap-3 md:grid-cols-3'>
             {[
-              ['01', '扫码入场', '微信登录与入场码待接入'],
+              ['01', '扫码入场', 'H5 扫码参与，微信身份待接入'],
               ['02', '点击互动', '全场共同推动游戏进程'],
               ['03', '成绩时刻', '团队排名与品牌贡献卡']
             ].map(([n, title, text]) => (

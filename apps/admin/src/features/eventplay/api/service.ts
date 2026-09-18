@@ -1,5 +1,6 @@
 import type { Activity, Brand, DemoRoom, GameConfig, Template, PublicEvent } from './types';
 import { controlGames } from './control-games.ts';
+import { storyboardErrors } from './storyboard.ts';
 import { quizGames } from './quiz-games.ts';
 import { drawGames } from './draw-games.ts';
 import { wallGames } from './wall-games.ts';
@@ -8,12 +9,14 @@ import { createGames } from './create-games.ts';
 import { voteGames,defaultStory } from './vote-games.ts';
 import { coordinationGames } from './coordination.ts';
 import { clickGames } from './click-games.ts';
+import { accountMode, accountRequest, accountWorkspaceRequest, ACCOUNT_KEY, ACCOUNT_SESSION, hostStorageKey } from './account.ts';
 const KEY = 'eventplay.activities.v1';
 const ROOM_KEY = 'eventplay.rooms.v1';
 export const DEFAULT_QUIZ = 'EventPlay 的玩家从哪里加入？|扫码进入|修改服务器|安装数据库|联系开发者|A\n团队互动最重要的是什么？|共同参与|只有主持人操作|关闭网络|不看规则|A';
 export const CLOUD_KEY = 'eventplay.workspace.token';
-export function cloudToken(): string { return localStorage.getItem(CLOUD_KEY) || ''; }
+export function cloudToken(): string { return accountMode() ? ACCOUNT_SESSION : localStorage.getItem(CLOUD_KEY) || ''; }
 export async function cloudRequest<T>(path: string, body?: unknown, token = cloudToken()): Promise<T> {
+  if (token === ACCOUNT_SESSION) return accountWorkspaceRequest<T>(path, body);
   const base = process.env.NEXT_PUBLIC_REALTIME_URL || (window.location.protocol === 'https:' ? `${window.location.origin}/realtime` : `${window.location.protocol}//${window.location.hostname}:8001`);
   const response = await fetch(`${base}${path}`, {
     method: body === undefined ? 'GET' : 'POST',
@@ -25,6 +28,7 @@ export async function cloudRequest<T>(path: string, body?: unknown, token = clou
   return result;
 }
 export async function connectCloud(token?: string): Promise<void> {
+  if (accountMode()) throw new Error('已登录个人工作空间，无需连接旧管理密钥');
   const key = token?.trim() || (await cloudRequest<{token: string}>('/workspaces', {})).token;
   await cloudRequest('/activities', undefined, key);
   localStorage.setItem(CLOUD_KEY, key);
@@ -50,13 +54,13 @@ export const listAgendas = () => cloudRequest<Agenda[]>('/agendas');
 export const getPublicEvent = (id: string) => cloudRequest<PublicEvent>(`/events/${encodeURIComponent(id)}`, undefined, '');
 export async function takeoverRoom(id: string) {
   const result = await cloudRequest<{ room: { id: string }; token: string }>(`/rooms/${id}/takeover`, {});
-  localStorage.setItem(`eventplay.host.${result.room.id}`, result.token);
+  localStorage.setItem(hostStorageKey(result.room.id), result.token);
   return result.room;
 }
 export const createAgenda = (name: string, activityIds: string[]) => cloudRequest<Agenda>('/agendas', { name, activityIds });
 export async function openAgenda(agenda: Agenda, next: boolean) {
   const result = await cloudRequest<{ room: { id: string }; token: string }>(`/agendas/${agenda.id}/${next ? 'next' : 'host'}`, next ? { index: agenda.index } : {});
-  localStorage.setItem(`eventplay.host.${result.room.id}`, result.token);
+  localStorage.setItem(hostStorageKey(result.room.id), result.token);
   return result.room.id;
 }
 export const templates: Template[] = [
@@ -138,6 +142,7 @@ export const templates: Template[] = [
   }
 ];
 function read<T>(key: string, fallback: T): T {
+  if (key === ROOM_KEY && accountMode()) key = `${key}.${localStorage.getItem(ACCOUNT_KEY)}`;
   const raw = localStorage.getItem(key);
   if (!raw) return fallback;
   try {
@@ -147,6 +152,7 @@ function read<T>(key: string, fallback: T): T {
   }
 }
 function write<T>(key: string, data: T): void {
+  if (key === ROOM_KEY && accountMode()) key = `${key}.${localStorage.getItem(ACCOUNT_KEY)}`;
   try {
     localStorage.setItem(key, JSON.stringify(data));
   } catch {
@@ -155,10 +161,16 @@ function write<T>(key: string, data: T): void {
 }
 export function configOf(a: GameConfig): GameConfig {
   const { name, description, mechanic, theme, duration, participants, teams, brand, logo, goal, quizText, winnerCount } = a;
-  return { name, description, mechanic, theme, duration, participants, teams, brand, logo, socialVariant:a.socialVariant,createVariant:a.createVariant,createImage:a.createImage??'/games/click/garden-bg-v1.png',voteVariant:a.voteVariant,voteOptions:a.voteOptions??'方案A\n方案B\n方案C\n方案D',voteImages:a.voteImages??'',voteStory:a.voteStory??defaultStory,voteLive:a.voteLive??true,voteChange:a.voteChange??false, wallVariant:a.wallVariant, drawVariant:a.drawVariant, drawRepeat:a.drawRepeat??false, quizVariant:a.quizVariant, controlVariant:a.controlVariant, reactionVariant: a.reactionVariant, clickVariant: a.clickVariant, raceVariant: a.raceVariant ?? 'horse', inputMode: a.inputMode ?? 'tap', swipeDirection: a.swipeDirection ?? 'up', goal: goal ?? 1000, quizText: quizText ?? DEFAULT_QUIZ, winnerCount: winnerCount ?? 1, prizeName: a.prizeName ?? '幸运奖', catchDifficulty: a.catchDifficulty ?? 'normal' };
+return { participationMode: a.participationMode ?? 'team', teamAssignment: a.teamAssignment ?? 'choose', raceBackdrop: a.raceBackdrop ?? 'day', raceHorse: a.raceHorse ?? 'team', name, description, mechanic, theme, duration, participants, teams, brand, logo, storyboard: a.storyboard ? structuredClone(a.storyboard) : null, socialVariant:a.socialVariant,createVariant:a.createVariant,createImage:a.createImage??'/games/click/garden-bg-v1.png',voteVariant:a.voteVariant,voteOptions:a.voteOptions??'方案A\n方案B\n方案C\n方案D',voteImages:a.voteImages??'',voteStory:a.voteStory??defaultStory,voteLive:a.voteLive??true,voteChange:a.voteChange??false, wallVariant:a.wallVariant, drawVariant:a.drawVariant, drawRepeat:a.drawRepeat??false, quizVariant:a.quizVariant, controlVariant:a.controlVariant, reactionVariant: a.reactionVariant, clickVariant: a.clickVariant, raceVariant: a.raceVariant ?? 'horse', inputMode: a.inputMode ?? 'tap', swipeDirection: a.swipeDirection ?? 'up', goal: goal ?? 1000, quizText: quizText ?? DEFAULT_QUIZ, winnerCount: winnerCount ?? 1, prizeName: a.prizeName ?? '幸运奖', catchDifficulty: a.catchDifficulty ?? 'normal' };
 }
 export function validateConfig(value: GameConfig): string[] {
   const errors: string[] = [];
+  if (value.participationMode === 'individual' && value.participants > 20) errors.push('个人赛最多支持20人');
+  if (!['team', 'individual'].includes(value.participationMode ?? 'team')) errors.push('参与模式无效');
+  if (!['choose', 'balanced'].includes(value.teamAssignment ?? 'choose')) errors.push('分队方式无效');
+  if (value.participationMode === 'individual' && (value.mechanic !== 'race' || value.clickVariant)) errors.push('个人赛目前仅支持竞速游戏');
+  if (!['day', 'sunset', 'night'].includes(value.raceBackdrop ?? 'day')) errors.push('赛场背景氛围无效');
+  if (!['team', 'red', 'blue', 'green', 'purple'].includes(value.raceHorse ?? 'team')) errors.push('赛马角色配色无效');
   if(value.socialVariant&&(!(value.socialVariant in socialGames)||value.mechanic!=='social'))errors.push('破冰场景与玩法不匹配');
   if(value.createVariant&&(!(value.createVariant in createGames)||value.mechanic!=='create'))errors.push('共创场景与玩法不匹配');
   if(value.mechanic==='create'&&(!value.createImage?.startsWith('/games/')||/\.\.|[?#]/.test(value.createImage)))errors.push('共创图片须为 /games/ 本地路径');
@@ -296,6 +308,8 @@ export async function archiveActivity(id: string): Promise<void> {
 }
 export async function publishDemo(id: string): Promise<Activity> {
   const item = await getActivity(id);
+  const flowErrors = item.storyboard ? storyboardErrors(item.storyboard) : [];
+  if (flowErrors.length) throw new Error(flowErrors.join('；'));
   if (cloudToken()) return cloudRequest<Activity>(`/activities/${id}/publish`, { revision: item.revision });
   const errors = validateConfig(item);
   if (errors.length) throw new Error(errors.join('；'));
@@ -398,6 +412,7 @@ export async function commandRoom(
   return next;
 }
 export async function getBrand(): Promise<Brand> {
+  if (accountMode()) return accountRequest<Brand>('brand');
   return read('eventplay.brand.v1', { name: 'EventPlay', color: '#f59e0b', logo: '' });
 }
 
@@ -443,6 +458,7 @@ export async function hostCommand(
   return commandRoom(id, command);
 }
 export async function saveBrand(brand: Brand): Promise<void> {
+  if (accountMode()) { await accountRequest('brand', brand); return; }
   write('eventplay.brand.v1', brand);
 }
 export async function resetDemo(): Promise<void> {

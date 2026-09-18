@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { creatorLink } from '../api/account';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQueryClient, useSuspenseQuery } from '@tanstack/react-query';
@@ -38,9 +39,9 @@ export function TemplateCard({ template }: { template: Template }) {
           <Link href={`/dashboard/templates/${template.id}`} className='underline'>看效果 / 试玩</Link>
           <Link
             className='flex items-center gap-1 text-foreground hover:underline'
-            href={`/dashboard/activities/new?template=${template.id}`}
+            href={creatorLink(template.id)}
           >
-            使用模板 <Icons.arrowRight className='size-3' />
+            制作同款 <Icons.arrowRight className='size-3' />
           </Link>
         </div>
       </CardContent>
@@ -111,7 +112,7 @@ function ActivityRows({ items }: { items: Activity[] }) {
               </td>
               <td>
                 <Badge variant='secondary'>
-                  {a.archived ? '已归档' : a.release ? `演示版本 v${a.release.version}` : '草稿'}
+                  {a.archived ? '已归档' : a.release ? `已发布 v${a.release.version}` : '私有草稿'}
                 </Badge>
               </td>
               <td className='text-xs text-muted-foreground'>

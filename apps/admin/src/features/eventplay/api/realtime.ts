@@ -1,6 +1,8 @@
 import { queryOptions } from '@tanstack/react-query';
 import type { GameConfig, DemoRoom } from './types';
+import { accountMode, accountWorkspaceRequest, hostStorageKey } from './account.ts';
 export interface LiveRoom {
+  leaderboard?: {id: string; name: string; score: number; rank: number}[];
   trial?: boolean;
   playerCount?: number;
   laneCounts?: number[];
@@ -30,7 +32,7 @@ export interface LiveRoom {
   revision: number;
   blackout: boolean;
   log: { at: number; text: string }[];
-  players: { id: string; name: string; team: number; score: number; control?:import('./control-games').ControlState; lane?: number; answered?: number[] }[];
+  players: { id: string; name: string; team: number; score: number; rank?: number; control?:import('./control-games').ControlState; lane?: number; answered?: number[] }[];
 }
 export interface PlayerSession {
   token: string;
@@ -79,15 +81,20 @@ export const liveQuery = (id: string, scope = 'full') =>
   });
 export async function createLiveRoom(config: GameConfig, activityId?: string) {
   const result = await liveRequest<{ room: LiveRoom; token: string }>('/rooms', config);
-  localStorage.setItem(`eventplay.host.${result.room.id}`, result.token);
+  localStorage.setItem(hostStorageKey(result.room.id), result.token);
   if (activityId) localStorage.setItem(`eventplay.activity-room.${activityId}`, result.room.id);
   return result.room;
 }
 export async function enterActivityRoom(activityId: string, config: GameConfig) {
+  if (accountMode()) {
+    const result = await accountWorkspaceRequest<{ room: LiveRoom; token: string }>(`/activities/${activityId}/enter`, {});
+    localStorage.setItem(hostStorageKey(result.room.id), result.token);
+    return result.room;
+  }
   const workspace = localStorage.getItem('eventplay.workspace.token');
   if (workspace) {
     const result = await liveRequest<{ room: LiveRoom; token: string }>(`/activities/${activityId}/enter`, {}, workspace);
-    localStorage.setItem(`eventplay.host.${result.room.id}`, result.token);
+    localStorage.setItem(hostStorageKey(result.room.id), result.token);
     return result.room;
   }
   const id = localStorage.getItem(`eventplay.activity-room.${activityId}`);
@@ -99,10 +106,10 @@ export async function enterActivityRoom(activityId: string, config: GameConfig) 
 }
 export async function restoreOwner(id: string, token: string) {
   await liveRequest(`/rooms/${id}/owner`, undefined, token.trim());
-  localStorage.setItem(`eventplay.host.${id}`, token.trim());
+  localStorage.setItem(hostStorageKey(id), token.trim());
 }
 export function ownerToken(id: string) {
-  return localStorage.getItem(`eventplay.host.${id}`) || '';
+  return localStorage.getItem(hostStorageKey(id)) || '';
 }
 export function sendPresence(id: string, role: 'player' | 'screen', clientId: string) {
   return liveRequest(`/rooms/${id}/presence`, {role,clientId}, role === 'player' ? playerSession(id)?.token : undefined);
@@ -167,7 +174,7 @@ export async function submitSkill(id:string, data:{token:string;elapsed?:number;
 }
 export async function createTrialRoom(config: GameConfig) {
   const result = await liveRequest<{room: LiveRoom; token: string}>('/trials', config);
-  localStorage.setItem(`eventplay.host.${result.room.id}`, result.token);
+  localStorage.setItem(hostStorageKey(result.room.id), result.token);
   return result.room;
 }
 export async function moveLiveRoom(id: string, direction: 'left' | 'right') {
@@ -185,7 +192,7 @@ export async function controlLiveRoom(id:string,direction:import('./control-game
 export async function rematchLiveRoom(id: string): Promise<LiveRoom> {
   const token = ownerToken(id);
   const room = await liveRequest<LiveRoom>(`/rooms/${id}/rematch`, {}, token);
-  localStorage.setItem(`eventplay.host.${room.id}`, token);
+  localStorage.setItem(hostStorageKey(room.id), token);
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
     if (key?.startsWith('eventplay.activity-room.') && localStorage.getItem(key) === id) localStorage.setItem(key, room.id);

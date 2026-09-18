@@ -1,11 +1,13 @@
 'use client';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { useAppForm } from '@/lib/form';
 import { Icons } from '@/components/icons';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Stage } from './stage';
+import { ACCOUNT_KEY, accountRequest, type AccountUser } from '../api/account';
 type Mode = 'login' | 'register' | 'forgot-password' | 'reset-password' | 'verify-email';
 const titles = {
   login: '欢迎回来',
@@ -15,8 +17,14 @@ const titles = {
   'verify-email': '验证你的邮箱'
 };
 export function AuthPage({ mode }: { mode: Mode }) {
+  return <Suspense fallback={<p className='p-8'>正在准备登录…</p>}><AuthForm mode={mode} /></Suspense>;
+}
+function AuthForm({ mode }: { mode: Mode }) {
+  const search = useSearchParams();
   const [message, setMessage] = useState('');
   const [show, setShow] = useState(false);
+  const destination = search.get('next');
+  const next = destination && /^\/dashboard(?:[/?]|$)/.test(destination) && !destination.includes('\\') ? destination : '/dashboard/templates';
   const form = useAppForm({
     defaultValues: { email: '', password: '', confirm: '', code: '' },
     onSubmit: async ({ value }) => {
@@ -25,8 +33,8 @@ export function AuthPage({ mode }: { mode: Mode }) {
         setMessage('请输入有效的邮箱地址');
         return;
       }
-      if (['login', 'register', 'reset-password'].includes(mode) && value.password.length < 8) {
-        setMessage('密码至少 8 位');
+      if (['login', 'register', 'reset-password'].includes(mode) && (value.password.length < 10 || value.password.length > 128)) {
+        setMessage('密码须为 10～128 位');
         return;
       }
       if (['register', 'reset-password'].includes(mode) && value.password !== value.confirm) {
@@ -34,15 +42,15 @@ export function AuthPage({ mode }: { mode: Mode }) {
         return;
       }
       try {
-        const response = await fetch(`/api/eventplay-auth/${mode}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(value)
-        });
-        const result = await response.json();
-        setMessage(result.message ?? '服务暂不可用，请稍后重试');
-      } catch {
-        setMessage('无法连接服务，请检查网络后重试');
+        const result = await accountRequest<{ user?: AccountUser; message: string }>(mode, value);
+        if (result.user) {
+          localStorage.setItem(ACCOUNT_KEY, result.user.id);
+          window.location.assign(next);
+          return;
+        }
+        setMessage(result.message);
+      } catch (error) {
+        setMessage((error as Error).message);
       }
     }
   });
@@ -154,12 +162,12 @@ export function AuthPage({ mode }: { mode: Mode }) {
             {mode === 'login' ? (
               <>
                 还没有账号？{' '}
-                <Link className='text-foreground underline' href='/register'>
+                <Link className='text-foreground underline' href={`/register?next=${encodeURIComponent(next)}`}>
                   立即注册
                 </Link>
               </>
             ) : (
-              <Link className='text-foreground underline' href='/login'>
+              <Link className='text-foreground underline' href={`/login?next=${encodeURIComponent(next)}`}>
                 返回登录
               </Link>
             )}
@@ -174,7 +182,7 @@ export function AuthPage({ mode }: { mode: Mode }) {
             无需账号，体验管理端演示
           </Button>
           <p className='mt-4 text-xs leading-5 text-muted-foreground'>
-            账号服务尚未接入，当前不会创建账号、保存密码或发送邮件。你可以先体验本地演示。
+            邮箱与密码用于登录个人云空间。密码至少 10 位；当前尚未开放邮件验证与自助找回，请妥善保管密码。也可先体验游戏，再制作同款。
           </p>
         </div>
         <p className='text-xs text-muted-foreground'>
