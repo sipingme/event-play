@@ -1,5 +1,11 @@
 .scene { position:relative; isolation:isolate; width:100%; aspect-ratio:16/9; min-height:540px; overflow:hidden; container-type:inline-size; color:#204a58; background:#c3edf1; font-family:Arial,'Microsoft YaHei',sans-serif; }
 .backdrop { position:absolute; inset:0; z-index:-2; background:url('/games/race/stadium-cartoon-v2.png') center/100% 100%; }
+.scene[data-race-variant='horse']:not(.sprintRace) .backdrop { inset:-2% -4%; animation:stadiumDrift 18s ease-in-out infinite alternate; animation-play-state:paused; }
+.scene[data-race-variant='horse'][data-moving='true']:not(.sprintRace) .backdrop { animation-play-state:running; }
+@keyframes stadiumDrift { from { transform:translateX(2%); } to { transform:translateX(-2%); } }
+@media (prefers-reduced-motion:reduce) {
+  .scene[data-race-variant='horse']:not(.sprintRace) .backdrop { animation:none; }
+}
 .packfield { position:absolute; top:32%; bottom:19%; left:2%; right:7%; }
 .packRunner { position:absolute; width:clamp(64px,9cqw,170px); aspect-ratio:3/4; transition:left .65s ease-out; pointer-events:none; }
 .packBody { position:absolute; inset:0; }

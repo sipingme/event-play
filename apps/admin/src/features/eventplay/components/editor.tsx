@@ -33,6 +33,7 @@ export function NewActivity() {
   const search = useSearchParams();
   const { data: brand } = useSuspenseQuery(brandQuery());
   const template = templates.find((t) => t.id === search.get('template')) ?? templates.find((t) => t.id === 'shake-race')!;
+  const individualRace = template.mechanic === 'race' && !template.clickVariant && (template.raceVariant ?? 'horse') === 'horse';
   return (
     <Editor
       initial={{
@@ -49,7 +50,8 @@ export function NewActivity() {
         theme: template.theme,
         teams: template.teams,
         duration: template.duration,
-        participants: 200,
+        participationMode: individualRace ? 'individual' : 'team',
+        participants: individualRace ? 10 : 200,
         goal: template.goal ?? 1000,
         brand: brand.name,
         logo: brand.logo

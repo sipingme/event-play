@@ -61,7 +61,7 @@ export function RaceArena({ config, racers, scores, remaining, compact, live, ph
       {leaders.toSorted((a,b)=>a.id.localeCompare(b.id)).map((p,index)=>{
         const seed = Array.from(p.id).reduce((n,c)=>(n*31+c.charCodeAt(0))>>>0,0);
         const color = config.raceHorse && config.raceHorse !== 'team' ? config.raceHorse : horseColors[seed%4];
-        return <div key={p.id} className={styles.packRunner} data-player-id={p.id} style={{left:`${3 + p.score/scale*76}%`,top:`${5 + seed%65}%`,zIndex:1+seed%65,'--horse':`url('/games/race/horse-cartoon-${color}-v2.png')`,'--team':colors[seed%4],'--offset':`${-(seed%20)/10}s`,'--weave':`${12+seed%22}px`,'--pace':`${3+seed%4}s`} as CSSProperties}>
+        return <div key={p.id} className={styles.packRunner} data-player-id={p.id} style={{left:`${3 + p.score/scale*76}%`,top:`${leaders.length > 1 ? 5 + index * 65 / (leaders.length - 1) : 37.5}%`,zIndex:1+index,'--horse':`url('/games/race/horse-cartoon-${color}-v2.png')`,'--team':colors[seed%4],'--offset':`${-(seed%20)/10}s`,'--weave':`${12+seed%22}px`,'--pace':`${3+seed%4}s`} as CSSProperties}>
           <div className={styles.packBody}><span className={styles.horse} aria-hidden='true'/><span className={styles.packName}>{p.name} · {p.score}分</span></div>
         </div>;
       })}
